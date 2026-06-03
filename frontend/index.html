@@ -264,7 +264,7 @@
         return response;
     }
 
-   async function searchMovies() {
+ async function searchMovies() {
     const query = document.getElementById('searchInput').value.trim();
     if (!query) return alert('Escribe una película');
     
@@ -282,7 +282,7 @@
             return;
         }
         
-        // Mostrar TODOS los resultados que tienen URL (cinecalidad, pelisplus, etc.)
+        // Mostrar TODOS los resultados que tienen URL
         const validResults = data.results.filter(movie => movie.url);
         
         if (validResults.length === 0) {
@@ -291,21 +291,33 @@
         }
         
         grid.innerHTML = '';
-        validResults.forEach(movie => {
+        
+        for (const movie of validResults) {
             const card = document.createElement('div');
             card.className = 'movie-card';
             
-            // Usar thumbnail o poster
-            const posterImg = movie.thumbnail || movie.poster;
+            let posterImg = movie.thumbnail || movie.poster;
+            
+            // Si no hay poster, intentar buscar en TMDB por título
+            if (!posterImg && movie.title) {
+                try {
+                    const tmdbRes = await fetchWithAuth(`${API_URL}/tmdb/search?title=${encodeURIComponent(movie.title)}`);
+                    const tmdbData = await tmdbRes.json();
+                    if (tmdbData.movie && tmdbData.movie.posterPath) {
+                        posterImg = tmdbData.movie.posterPath;
+                    }
+                } catch(e) {
+                    console.log('Error buscando poster en TMDB');
+                }
+            }
             
             card.innerHTML = `
                 ${posterImg ? `<img src="${posterImg}" alt="${movie.title}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">` : '<div class="no-image">🎬</div>'}
-                ${!posterImg ? '<div class="no-image">🎬</div>' : ''}
                 <h3>${movie.title.substring(0, 50)}${movie.title.length > 50 ? '...' : ''}</h3>
             `;
             card.onclick = () => getMovieInfo(movie.url);
             grid.appendChild(card);
-        });
+        }
     } catch (error) {
         console.error('Error:', error);
         grid.innerHTML = '<div class="no-results">❌ Error al buscar</div>';
