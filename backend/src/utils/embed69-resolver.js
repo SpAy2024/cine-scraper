@@ -1,4 +1,3 @@
-// utils/embed69-resolver.js
 const axios = require('axios');
 
 function decodeJwt(jwt) {
@@ -7,6 +6,7 @@ function decodeJwt(jwt) {
     if (parts.length >= 2) {
       const payload = Buffer.from(parts[1], 'base64').toString('utf-8');
       const json = JSON.parse(payload);
+      // Intentar diferentes claves (como en tu código Kotlin)
       return json.link || json.url || json.src || json.video || null;
     }
     return null;
@@ -28,7 +28,7 @@ async function extraerServidoresEmbed69(embedUrl) {
     
     const html = response.data;
     
-    // Buscar dataLink = [...]
+    // Buscar dataLink = [...] (como en tu código Kotlin)
     const regex = /dataLink\s*=\s*(\[.*?\]);/s;
     const match = html.match(regex);
     
@@ -45,7 +45,7 @@ async function extraerServidoresEmbed69(embedUrl) {
           servers.push({
             server: serverName,
             url: realUrl,
-            type: 'iframe',
+            audio: 'Desconocido',
             quality: 'HD'
           });
         }

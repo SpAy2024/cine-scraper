@@ -1,4 +1,3 @@
-// services/multi-provider.service.js
 const axios = require('axios');
 const cheerio = require('cheerio');
 const { slugify } = require('../utils/slugify');
@@ -32,18 +31,16 @@ class MultiProviderService {
         });
         const $ = cheerio.load(response.data);
         
-        // Estilo viejo: li.playurl
-        $('li.playurl').each((i, el) => {
+        // Estilo viejo: li.playurl (como en tu código Kotlin)
+        for (const el of $('li.playurl').toArray()) {
           const dataUrl = $(el).attr('data-url')?.trim();
           const serverName = $(el).find('a').text().trim() || 'Servidor';
           const dataName = $(el).attr('data-name') || 'Latino';
           
           if (dataUrl) {
             if (serverName.toLowerCase() === 'embed69') {
-              // Extraer servidores internos de Embed69
-              extraerServidoresEmbed69(dataUrl).then(internalServers => {
-                allServers.push(...internalServers.filter(s => SERVERS_ALLOWED.includes(s.server.toLowerCase())));
-              });
+              const internalServers = await extraerServidoresEmbed69(dataUrl);
+              allServers.push(...internalServers.filter(s => SERVERS_ALLOWED.includes(s.server.toLowerCase())));
             } else if (SERVERS_ALLOWED.includes(serverName.toLowerCase())) {
               allServers.push({
                 server: serverName,
@@ -53,12 +50,12 @@ class MultiProviderService {
               });
             }
           }
-        });
+        }
         
-        // Estilo nuevo: ul.TbVideoNv
-        $('ul.TbVideoNv li').each((i, el) => {
-          const serverName = $(el).find('a').text().trim();
-          const dataId = $(el).attr('data-id');
+        // Estilo nuevo: ul.TbVideoNv (como en tu código Kotlin)
+        for (const tab of $('ul.TbVideoNv li').toArray()) {
+          const serverName = $(tab).find('a').text().trim();
+          const dataId = $(tab).attr('data-id');
           let url = $('#video-content iframe').attr('src') || '';
           
           if (!url) {
@@ -70,9 +67,8 @@ class MultiProviderService {
           
           if (url) {
             if (serverName.toLowerCase() === 'embed69') {
-              extraerServidoresEmbed69(url).then(internalServers => {
-                allServers.push(...internalServers.filter(s => SERVERS_ALLOWED.includes(s.server.toLowerCase())));
-              });
+              const internalServers = await extraerServidoresEmbed69(url);
+              allServers.push(...internalServers.filter(s => SERVERS_ALLOWED.includes(s.server.toLowerCase())));
             } else if (SERVERS_ALLOWED.includes(serverName.toLowerCase())) {
               allServers.push({
                 server: serverName,
@@ -82,7 +78,7 @@ class MultiProviderService {
               });
             }
           }
-        });
+        }
         
         if (allServers.length > 0) return allServers;
         
@@ -91,12 +87,12 @@ class MultiProviderService {
       }
     }
     
-    // Fallback a CineCalidad
+    // Fallback a CineCalidad (como en tu código Kotlin)
     if (allServers.length === 0) {
       allServers = await this.buscarServidoresCineCalidad(title);
     }
     
-    // Fallback a título en inglés
+    // Fallback a título en inglés (como en tu código Kotlin)
     if (allServers.length === 0 && titleEnglish && titleEnglish !== title) {
       console.log(`🌎 Intentando con título en inglés: "${titleEnglish}"`);
       return await this.buscarServidoresPorTitulo(titleEnglish);
@@ -127,13 +123,16 @@ class MultiProviderService {
   }
   
   async buscarServidoresCineCalidad(title) {
-    // Tu implementación existente de Cinecalidad
     const servers = [];
     const slug = slugify(title);
     const url = `https://www.cinecalidad.ec/ver-pelicula/${slug}`;
     
     try {
-      const response = await axios.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 15000 });
+      console.log(`🎬 Buscando en CineCalidad: ${url}`);
+      const response = await axios.get(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        timeout: 15000
+      });
       const $ = cheerio.load(response.data);
       
       $('#playeroptionsul .dooplay_player_option').each((i, el) => {
