@@ -106,19 +106,24 @@ class ScraperService {
   }
   
   // ==================== BÚSQUEDA COMBINADA ====================
- async search(query) {
+async search(query) {
   console.log(`🔍 Buscando: "${query}"`);
   
-  // PRIMERO: Buscar en Cinecalidad (los que tienen URL)
+  // Buscar en Cinecalidad
   const cinecalidadResults = await this.searchCinecalidad(query);
-  
-  // Si hay resultados de Cinecalidad, devolver SOLO esos
   if (cinecalidadResults.length > 0) {
     console.log(`✅ ${cinecalidadResults.length} resultados de Cinecalidad`);
     return cinecalidadResults;
   }
   
-  // SOLO si no hay resultados de Cinecalidad, buscar en TMDB
+  // Buscar en PelisPlus
+  const pelisplusResults = await this.searchPelisplus(query);
+  if (pelisplusResults.length > 0) {
+    console.log(`✅ ${pelisplusResults.length} resultados de PelisPlus`);
+    return pelisplusResults;
+  }
+  
+  // Si no hay resultados, buscar en TMDB
   const tmdbMovies = await this.searchTMDB(query, 'movie');
   const tmdbSeries = await this.searchTMDB(query, 'tv');
   const allTmdb = [...tmdbMovies, ...tmdbSeries];
@@ -133,12 +138,21 @@ class ScraperService {
     type: tm.type === 'tv' ? 'serie' : 'movie'
   }));
 }
+
+
   // ==================== OBTENER INFORMACIÓN ====================
 async getInfo(url) {
   // ==================== DETECTAR EPISODIO ====================
   if (url.includes('/episodio/') || url.includes('/ver-el-episodio/')) {
     console.log(`🎬 Detectado como episodio: ${url}`);
     return await this.getEpisodeInfo(url);
+  }
+
+
+  // ==================== DETECTAR PELISPLUS ====================
+  if (url.includes('pelisplus21.com')) {
+    console.log(`🎬 Detectado como PelisPlus: ${url}`);
+    return await this.getPelisplusInfo(url);
   }
   
   try {
@@ -287,6 +301,102 @@ async getInfo(url) {
     };
   } catch (error) {
     console.error('Error en getInfo:', error.message);
+    return null;
+  }
+}
+
+// ==================== PELISPLUS ====================
+async searchPelisplus(query) {
+  const results = [];
+  const queryLower = query.toLowerCase();
+  
+  try {
+    const searchUrl = `https://pelisplus21.com/?s=${encodeURIComponent(query)}`;
+    console.log(`🔍 Buscando en PelisPlus: ${searchUrl}`);
+    const response = await axios.get(searchUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      timeout: 15000
+    });
+    const $ = cheerio.load(response.data);
+    
+    $('a[href*="/pelicula/"]').each((i, el) => {
+      const url = $(el).attr('href');
+      let title = $(el).find('h3, .title, .entry-title').text().trim();
+      if (!title) title = $(el).text().trim();
+      
+      if (title && title.toLowerCase().includes(queryLower)) {
+        results.push({
+          id: null,
+          title: title,
+          url: url,
+          thumbnail: $(el).find('img').attr('src'),
+          provider: 'pelisplus',
+          type: 'movie'
+        });
+      }
+    });
+    
+    console.log(`✅ PelisPlus: ${results.length} resultados`);
+  } catch (error) {
+    console.log('Error en PelisPlus:', error.message);
+  }
+  
+  return results;
+}
+
+
+async getPelisplusInfo(url) {
+  try {
+    console.log(`📄 Obteniendo info de PelisPlus: ${url}`);
+    const response = await axios.get(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      timeout: 15000
+    });
+    const $ = cheerio.load(response.data);
+    
+    const title = $('h1').first().text().trim() || 'Sin título';
+    
+    let year = null;
+    $('.year, .date, .extra span').each((i, el) => {
+      const match = $(el).text().match(/\b(19|20)\d{2}\b/);
+      if (match) year = match[0];
+    });
+    
+    let synopsis = '';
+    $('.wp-content p, .description, .sinopsis').each((i, el) => {
+      const text = $(el).text().trim();
+      if (text.length > 100) { synopsis = text; return false; }
+    });
+    
+    const poster = $('.poster img, .sheader .poster img').attr('src') || null;
+    
+    const downloadLinks = [];
+    
+    // Servidores de PelisPlus
+    $('.dooplay_player_option').each((i, el) => {
+      const dataPost = $(el).attr('data-post');
+      const dataNume = $(el).attr('data-nume');
+      const serverName = $(el).find('.title').text().trim() || 'Servidor';
+      
+      if (dataPost && dataNume) {
+        const ajaxUrl = `https://pelisplus21.com/wp-admin/admin-ajax.php?action=dooplay_player&post=${dataPost}&nume=${dataNume}&type=movie`;
+        downloadLinks.push({ server: serverName, url: ajaxUrl, type: 'ajax' });
+      }
+    });
+    
+    // Iframes directos
+    $('iframe').each((i, el) => {
+      const src = $(el).attr('src');
+      if (src && src.startsWith('http')) {
+        downloadLinks.push({ server: `Servidor ${i+1}`, url: src, type: 'iframe' });
+      }
+    });
+    
+    console.log(`✅ PelisPlus: ${downloadLinks.length} servidores`);
+    
+    return { title, synopsis: synopsis.substring(0, 500), year, url, provider: 'pelisplus', poster, downloadLinks };
+  } catch (error) {
+    console.error('Error en getPelisplusInfo:', error.message);
     return null;
   }
 }
