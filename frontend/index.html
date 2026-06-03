@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CineScraper - Busca y Disfruta</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Netflix Sans', 'Helvetica Neue', Arial, sans-serif;
+            background: #141414;
+            color: #fff;
+        }
+
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(180deg, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 100%);
+            padding: 0 40px;
+            height: 68px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 1000;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            background: linear-gradient(135deg, #e50914, #ff6b6b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-decoration: none;
+        }
+
+        .hero {
+            height: 60vh;
+            background: linear-gradient(77deg, rgba(0,0,0,.85) 0%, rgba(0,0,0,.4) 50%);
+            display: flex;
+            align-items: center;
+            padding: 0 60px;
+            margin-top: 68px;
+        }
+
+        .hero h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .search-container {
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+        }
+
+        .search-box {
+            display: flex;
+            gap: 15px;
+        }
+
+        .search-box input {
+            flex: 1;
+            padding: 15px 20px;
+            font-size: 1rem;
+            border: none;
+            border-radius: 8px;
+            background: #2a2a2a;
+            color: white;
+        }
+
+        .search-box button {
+            padding: 15px 35px;
+            background: #e50914;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .search-box button:hover {
+            background: #ff0a1a;
+        }
+
+        .results {
+            padding: 20px 60px;
+        }
+
+        .movie-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 20px;
+        }
+
+        .movie-card {
+            background: #1a1a1a;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.3s;
+        }
+
+        .movie-card:hover {
+            transform: scale(1.05);
+        }
+
+        .movie-card img {
+            width: 100%;
+            height: 270px;
+            object-fit: cover;
+        }
+
+        .movie-card .no-image {
+            width: 100%;
+            height: 270px;
+            background: linear-gradient(135deg, #2a2a2a, #1a1a1a);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+        }
+
+        .movie-card h3 {
+            padding: 10px;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.95);
+            z-index: 2000;
+        }
+
+        .modal-content {
+            max-width: 1000px;
+            margin: 40px auto;
+            background: #141414;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 20px;
+            right: 25px;
+            font-size: 28px;
+            cursor: pointer;
+            background: rgba(0,0,0,0.5);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .video-container iframe {
+            width: 100%;
+            height: 56vh;
+            border: none;
+        }
+
+        .modal-info {
+            padding: 30px;
+        }
+
+        .servers-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 15px;
+        }
+
+        .server-btn {
+            padding: 10px 20px;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 6px;
+            color: white;
+            cursor: pointer;
+        }
+
+        .server-btn:hover {
+            background: #e50914;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 60px;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 60px;
+            color: #888;
+        }
+
+        @media (max-width: 768px) {
+            .hero { padding: 0 20px; }
+            .hero h1 { font-size: 2rem; }
+            .results { padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+
+<nav class="navbar">
+    <a href="#" class="logo">CINESCRAPER</a>
+</nav>
+
+<div class="hero">
+    <div class="hero-content">
+        <h1>Películas en Calidad HD</h1>
+        <p>Busca y encuentra servidores para ver online</p>
+    </div>
+</div>
+
+<div class="search-container">
+    <div class="search-box">
+        <input type="text" id="searchInput" placeholder="Ej: Batman, El señor de los anillos, Inception..." autocomplete="off">
+        <button onclick="searchMovies()">🔍 Buscar</button>
+    </div>
+</div>
+
+<div class="results" id="results">
+    <div class="movie-grid" id="moviesGrid"></div>
+</div>
+
+<div id="modal" class="modal">
+    <div class="modal-content">
+        <span class="modal-close" onclick="closeModal()">&times;</span>
+        <div id="modalBody"></div>
+    </div>
+</div>
+
+<script>
+    const API_URL = window.location.hostname === 'localhost' 
+        ? 'http://localhost:3001/api/v1/movies'
+        : '/api/v1/movies';
+
+    async function searchMovies() {
+        const query = document.getElementById('searchInput').value.trim();
+        if (!query) return alert('Escribe una película');
+        
+        const grid = document.getElementById('moviesGrid');
+        grid.innerHTML = '<div class="loading">🔍 Buscando...</div>';
+        
+        try {
+            const response = await fetch(`${API_URL}/search?q=${encodeURIComponent(query)}`);
+            const data = await response.json();
+            
+            if (!data.results || data.results.length === 0) {
+                grid.innerHTML = '<div class="no-results">😞 No se encontraron resultados</div>';
+                return;
+            }
+            
+            grid.innerHTML = '';
+            data.results.forEach(movie => {
+                const card = document.createElement('div');
+                card.className = 'movie-card';
+                card.innerHTML = `
+                    ${movie.thumbnail ? `<img src="${movie.thumbnail}" alt="${movie.title}">` : '<div class="no-image">🎬</div>'}
+                    <h3>${movie.title}</h3>
+                `;
+                card.onclick = () => getMovieInfo(movie.url);
+                grid.appendChild(card);
+            });
+        } catch (error) {
+            grid.innerHTML = '<div class="no-results">❌ Error al buscar</div>';
+        }
+    }
+    
+    async function getMovieInfo(url) {
+        const modal = document.getElementById('modal');
+        const modalBody = document.getElementById('modalBody');
+        modalBody.innerHTML = '<div class="loading">🎬 Cargando información...</div>';
+        modal.style.display = 'block';
+        
+        try {
+            const response = await fetch(`${API_URL}/info?url=${encodeURIComponent(url)}`);
+            const data = await response.json();
+            
+            if (!data.data) throw new Error('No hay datos');
+            
+            const movie = data.data;
+            modalBody.innerHTML = `
+                <div class="video-container">
+                    <div id="playerFrame" style="height:56vh; background:#000; display:flex; align-items:center; justify-content:center; color:#888;">
+                        Selecciona un servidor
+                    </div>
+                </div>
+                <div class="modal-info">
+                    <h2>${movie.title}</h2>
+                    <p>${movie.synopsis || 'Sinopsis no disponible'}</p>
+                    <div class="servers-grid" id="serversGrid"></div>
+                </div>
+            `;
+            
+            const serversGrid = document.getElementById('serversGrid');
+            if (movie.downloadLinks && movie.downloadLinks.length > 0) {
+                movie.downloadLinks.forEach(server => {
+                    const btn = document.createElement('button');
+                    btn.className = 'server-btn';
+                    btn.textContent = server.server;
+                    btn.onclick = () => {
+                        const frame = document.getElementById('playerFrame');
+                        frame.innerHTML = `<iframe src="${server.url}" frameborder="0" allowfullscreen allow="autoplay; encrypted-media" style="width:100%; height:100%;"></iframe>`;
+                    };
+                    serversGrid.appendChild(btn);
+                });
+            } else {
+                serversGrid.innerHTML = '<div class="no-results">⚠️ No hay servidores disponibles</div>';
+            }
+        } catch (error) {
+            modalBody.innerHTML = `<div class="no-results">❌ Error: ${error.message}</div>`;
+        }
+    }
+    
+    function closeModal() {
+        document.getElementById('modal').style.display = 'none';
+    }
+    
+    document.getElementById('searchInput').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') searchMovies();
+    });
+</script>
+</body>
+</html>

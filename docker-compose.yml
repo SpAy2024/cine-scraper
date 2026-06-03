@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  node-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - PHP_API_URL=http://php-scraper:80
+      - NODE_ENV=production
+    depends_on:
+      - php-scraper
+    restart: always
+
+  php-scraper:
+    build:
+      context: ./scraper-php
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    restart: always
