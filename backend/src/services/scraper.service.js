@@ -68,6 +68,7 @@ class ScraperService {
         const selectors = [
           'a[href*="/ver-pelicula/"]',
           'a[href*="/pelicula/"]',
+          'a[href*="/ver-serie/"]',
           'a[href*="/series/"]',
           'a[href*="/animes/"]'
         ];
@@ -105,61 +106,33 @@ class ScraperService {
   }
   
   // ==================== BÚSQUEDA COMBINADA ====================
-  async search(query) {
-    console.log(`🔍 Buscando: "${query}"`);
-    
-    // Buscar en TMDB
-    const tmdbMovies = await this.searchTMDB(query, 'movie');
-    const tmdbSeries = await this.searchTMDB(query, 'tv');
-    const allTmdb = [...tmdbMovies, ...tmdbSeries];
-    
-    // Buscar en Cinecalidad
-    const cinecalidadResults = await this.searchCinecalidad(query);
-    
-    const combined = [];
-    
-    // Combinar Cinecalidad con TMDB
-    for (const cc of cinecalidadResults) {
-      const match = allTmdb.find(tm => 
-        tm.title.toLowerCase().includes(cc.title.toLowerCase()) ||
-        cc.title.toLowerCase().includes(tm.title.toLowerCase())
-      );
-      
-      combined.push({
-        id: match?.id || cc.id,
-        title: cc.title,
-        year: match?.year || cc.year,
-        url: cc.url,
-        thumbnail: match?.poster || cc.thumbnail,
-        poster: match?.poster,
-        backdrop: match?.backdrop,
-        overview: match?.overview,
-        voteAverage: match?.voteAverage,
-        provider: 'cinecalidad',
-        type: cc.type
-      });
-    }
-    
-    // Si no hay resultados, mostrar resultados de TMDB
-    if (combined.length === 0) {
-      return allTmdb.map(tm => ({
-        id: tm.id,
-        title: tm.title,
-        year: tm.year,
-        url: null,
-        thumbnail: tm.poster,
-        poster: tm.poster,
-        backdrop: tm.backdrop,
-        overview: tm.overview,
-        voteAverage: tm.voteAverage,
-        provider: 'tmdb',
-        type: tm.type === 'tv' ? 'serie' : 'movie'
-      }));
-    }
-    
-    return combined;
+ async search(query) {
+  console.log(`🔍 Buscando: "${query}"`);
+  
+  // PRIMERO: Buscar en Cinecalidad (los que tienen URL)
+  const cinecalidadResults = await this.searchCinecalidad(query);
+  
+  // Si hay resultados de Cinecalidad, devolver SOLO esos
+  if (cinecalidadResults.length > 0) {
+    console.log(`✅ ${cinecalidadResults.length} resultados de Cinecalidad`);
+    return cinecalidadResults;
   }
   
+  // SOLO si no hay resultados de Cinecalidad, buscar en TMDB
+  const tmdbMovies = await this.searchTMDB(query, 'movie');
+  const tmdbSeries = await this.searchTMDB(query, 'tv');
+  const allTmdb = [...tmdbMovies, ...tmdbSeries];
+  
+  return allTmdb.map(tm => ({
+    id: tm.id,
+    title: tm.title,
+    year: tm.year,
+    url: null,
+    thumbnail: tm.poster,
+    provider: 'tmdb',
+    type: tm.type === 'tv' ? 'serie' : 'movie'
+  }));
+}
   // ==================== OBTENER INFORMACIÓN ====================
   async getInfo(url) {
     try {
