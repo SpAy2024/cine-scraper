@@ -134,156 +134,162 @@ class ScraperService {
   }));
 }
   // ==================== OBTENER INFORMACIÓN ====================
-  async getInfo(url) {
+async getInfo(url) {
+  // ==================== DETECTAR EPISODIO ====================
+  if (url.includes('/episodio/') || url.includes('/ver-el-episodio/')) {
+    console.log(`🎬 Detectado como episodio: ${url}`);
+    return await this.getEpisodeInfo(url);
+  }
+  
+  try {
+    console.log(`📄 Obteniendo info de: ${url}`);
+    const response = await axios.get(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      timeout: 15000
+    });
+    const $ = cheerio.load(response.data);
+    
+    // Detectar tipo de contenido
+    let type = 'movie';
+    if (url.includes('/series/')) type = 'serie';
+    else if (url.includes('/animes/')) type = 'anime';
+    
+    // Título
+    const title = $('h1').first().text().trim() || 'Sin título';
+    
+    // Año
+    let year = null;
+    $('.year, .date').each((i, el) => {
+      const text = $(el).text();
+      const match = text.match(/\b(19|20)\d{2}\b/);
+      if (match) year = match[0];
+    });
+    
+    // Sinopsis
+    let synopsis = '';
+    $('td p, .description, .sinopsis').each((i, el) => {
+      const text = $(el).text().trim();
+      if (text.length > 100) {
+        synopsis = text;
+        return false;
+      }
+    });
+    
+    // Poster
+    let poster = $('img[data-src*="tmdb"]').attr('data-src') || $('img[src*="tmdb"]').attr('src') || null;
+    
+    // Buscar en TMDB para mejorar información
+    let tmdbData = null;
     try {
-      console.log(`📄 Obteniendo info de: ${url}`);
-      const response = await axios.get(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-        timeout: 15000
+      const searchType = (type === 'serie') ? 'tv' : 'movie';
+      const tmdbResponse = await axios.get(`${TMDB_BASE}/search/${searchType}`, {
+        params: { api_key: TMDB_API_KEY, query: title, year: year, language: 'es' }
       });
-      const $ = cheerio.load(response.data);
-      
-      // Detectar tipo de contenido
-      let type = 'movie';
-      if (url.includes('/series/')) type = 'serie';
-      else if (url.includes('/animes/')) type = 'anime';
-      
-      // Título
-      const title = $('h1').first().text().trim() || 'Sin título';
-      
-      // Año
-      let year = null;
-      $('.year, .date').each((i, el) => {
-        const text = $(el).text();
-        const match = text.match(/\b(19|20)\d{2}\b/);
-        if (match) year = match[0];
-      });
-      
-      // Sinopsis
-      let synopsis = '';
-      $('td p, .description, .sinopsis').each((i, el) => {
-        const text = $(el).text().trim();
-        if (text.length > 100) {
-          synopsis = text;
-          return false;
-        }
-      });
-      
-      // Poster
-      let poster = $('img[data-src*="tmdb"]').attr('data-src') || $('img[src*="tmdb"]').attr('src') || null;
-      
-      // Buscar en TMDB para mejorar información
-      let tmdbData = null;
-      try {
-        const searchType = (type === 'serie') ? 'tv' : 'movie';
-        const tmdbResponse = await axios.get(`${TMDB_BASE}/search/${searchType}`, {
-          params: { api_key: TMDB_API_KEY, query: title, year: year, language: 'es' }
-        });
-        if (tmdbResponse.data.results && tmdbResponse.data.results.length > 0) {
-          tmdbData = tmdbResponse.data.results[0];
-          poster = tmdbData.poster_path ? `https://image.tmdb.org/t/p/w500${tmdbData.poster_path}` : poster;
-          synopsis = tmdbData.overview || synopsis;
-          year = tmdbData.release_date ? tmdbData.release_date.split('-')[0] : (tmdbData.first_air_date ? tmdbData.first_air_date.split('-')[0] : year);
-        }
-      } catch (err) { console.log('TMDB no disponible'); }
-      
-      // ==================== SERVIDORES ====================
-      const downloadLinks = [];
-      
-      $('#playeroptionsul .dooplay_player_option').each((i, el) => {
-        const dataOption = $(el).attr('data-option');
-        const serverName = $(el).text().trim().replace(/Recomendado$/, '').trim();
-        if (dataOption && dataOption !== '#') {
-          const match = dataOption.match(/zopass=([^&]+)/);
-          if (match && match[1]) {
-            try {
-              const decodedUrl = Buffer.from(match[1], 'base64').toString('utf-8');
-              downloadLinks.push({ server: serverName || `Servidor ${i+1}`, url: decodedUrl, type: 'iframe' });
-            } catch(e) {
-              downloadLinks.push({ server: serverName || `Servidor ${i+1}`, url: dataOption, type: 'iframe' });
-            }
-          } else {
+      if (tmdbResponse.data.results && tmdbResponse.data.results.length > 0) {
+        tmdbData = tmdbResponse.data.results[0];
+        poster = tmdbData.poster_path ? `https://image.tmdb.org/t/p/w500${tmdbData.poster_path}` : poster;
+        synopsis = tmdbData.overview || synopsis;
+        year = tmdbData.release_date ? tmdbData.release_date.split('-')[0] : (tmdbData.first_air_date ? tmdbData.first_air_date.split('-')[0] : year);
+      }
+    } catch (err) { console.log('TMDB no disponible'); }
+    
+    // ==================== SERVIDORES ====================
+    const downloadLinks = [];
+    
+    $('#playeroptionsul .dooplay_player_option').each((i, el) => {
+      const dataOption = $(el).attr('data-option');
+      const serverName = $(el).text().trim().replace(/Recomendado$/, '').trim();
+      if (dataOption && dataOption !== '#') {
+        const match = dataOption.match(/zopass=([^&]+)/);
+        if (match && match[1]) {
+          try {
+            const decodedUrl = Buffer.from(match[1], 'base64').toString('utf-8');
+            downloadLinks.push({ server: serverName || `Servidor ${i+1}`, url: decodedUrl, type: 'iframe' });
+          } catch(e) {
             downloadLinks.push({ server: serverName || `Servidor ${i+1}`, url: dataOption, type: 'iframe' });
           }
+        } else {
+          downloadLinks.push({ server: serverName || `Servidor ${i+1}`, url: dataOption, type: 'iframe' });
         }
-      });
-      
-      $('#sbss a').each((i, el) => {
-        const href = $(el).attr('href');
-        const serverName = $(el).find('li').text().trim() || 'Descarga';
-        if (href && href !== '#') {
-          downloadLinks.push({ server: serverName, url: href, type: 'download' });
-        }
-      });
-      
-      // ==================== EPISODIOS (para series/animes) ====================
-      let episodes = [];
-      
-      if (type === 'serie' || type === 'anime') {
-        // Buscar temporadas y episodios
-        $('.se-c, .season-tab, .temporada').each((i, el) => {
-          const seasonNum = $(el).find('.se-q, .season-number').text().trim().match(/\d+/);
-          const episodeList = [];
+      }
+    });
+    
+    $('#sbss a').each((i, el) => {
+      const href = $(el).attr('href');
+      const serverName = $(el).find('li').text().trim() || 'Descarga';
+      if (href && href !== '#') {
+        downloadLinks.push({ server: serverName, url: href, type: 'download' });
+      }
+    });
+    
+    // ==================== EPISODIOS (para series/animes) ====================
+    let episodes = [];
+    
+    if (type === 'serie' || type === 'anime') {
+      // Buscar temporadas y episodios
+      $('.se-c, .season-tab, .temporada').each((i, el) => {
+        const seasonNum = $(el).find('.se-q, .season-number').text().trim().match(/\d+/);
+        const episodeList = [];
+        
+        $(el).find('.episodiotitle a, .episode-item, .episodio a').each((j, ep) => {
+          const epUrl = $(ep).attr('href');
+          const epNum = $(ep).find('.num, .episode-number').text().trim() || (j + 1).toString();
+          const epTitle = $(ep).find('.title').text().trim() || `Episodio ${epNum}`;
           
-          $(el).find('.episodiotitle a, .episode-item, .episodio a').each((j, ep) => {
-            const epUrl = $(ep).attr('href');
-            const epNum = $(ep).find('.num, .episode-number').text().trim() || (j + 1).toString();
-            const epTitle = $(ep).find('.title').text().trim() || `Episodio ${epNum}`;
-            
-            if (epUrl && epUrl !== '#') {
-              episodeList.push({
-                number: epNum,
-                title: epTitle,
-                url: epUrl.startsWith('http') ? epUrl : `https://cinecalidad.onl${epUrl}`
-              });
-            }
-          });
-          
-          if (episodeList.length > 0) {
-            episodes.push({
-              season: seasonNum ? parseInt(seasonNum[0]) : 1,
-              episodes: episodeList
+          if (epUrl && epUrl !== '#') {
+            episodeList.push({
+              number: epNum,
+              title: epTitle,
+              url: epUrl.startsWith('http') ? epUrl : `https://cinecalidad.onl${epUrl}`
             });
           }
         });
         
-        // Si no encontró temporadas, buscar episodios sueltos
-        if (episodes.length === 0) {
-          $('.episodios a, .episode-item').each((i, el) => {
-            const epUrl = $(el).attr('href');
-            const epNum = (i + 1).toString();
-            const epTitle = $(el).text().trim() || `Episodio ${epNum}`;
-            
-            if (epUrl && epUrl !== '#') {
-              episodes.push({
-                number: epNum,
-                title: epTitle,
-                url: epUrl.startsWith('http') ? epUrl : `https://cinecalidad.onl${epUrl}`
-              });
-            }
+        if (episodeList.length > 0) {
+          episodes.push({
+            season: seasonNum ? parseInt(seasonNum[0]) : 1,
+            episodes: episodeList
           });
         }
+      });
+      
+      // Si no encontró temporadas, buscar episodios sueltos
+      if (episodes.length === 0) {
+        $('.episodios a, .episode-item').each((i, el) => {
+          const epUrl = $(el).attr('href');
+          const epNum = (i + 1).toString();
+          const epTitle = $(el).text().trim() || `Episodio ${epNum}`;
+          
+          if (epUrl && epUrl !== '#') {
+            episodes.push({
+              number: epNum,
+              title: epTitle,
+              url: epUrl.startsWith('http') ? epUrl : `https://cinecalidad.onl${epUrl}`
+            });
+          }
+        });
       }
-      
-      console.log(`✅ ${downloadLinks.length} servidores, ${episodes.length} episodios`);
-      
-      return {
-        title: title,
-        synopsis: synopsis.substring(0, 500) || 'Sinopsis no disponible',
-        year: year,
-        url: url,
-        provider: 'cinecalidad',
-        type: type,
-        poster: poster,
-        voteAverage: tmdbData?.vote_average,
-        downloadLinks: downloadLinks,
-        episodes: episodes
-      };
-    } catch (error) {
-      console.error('Error en getInfo:', error.message);
-      return null;
     }
+    
+    console.log(`✅ ${downloadLinks.length} servidores, ${episodes.length} episodios`);
+    
+    return {
+      title: title,
+      synopsis: synopsis.substring(0, 500) || 'Sinopsis no disponible',
+      year: year,
+      url: url,
+      provider: 'cinecalidad',
+      type: type,
+      poster: poster,
+      voteAverage: tmdbData?.vote_average,
+      downloadLinks: downloadLinks,
+      episodes: episodes
+    };
+  } catch (error) {
+    console.error('Error en getInfo:', error.message);
+    return null;
   }
+}
 
 
 // ==================== EPISODIOS ====================
@@ -298,37 +304,56 @@ async getEpisodeInfo(episodeUrl) {
     
     // Título del episodio
     const title = $('h1').first().text().trim() || 'Episodio';
+    console.log(`📌 Título: ${title}`);
     
-    // Servidores del episodio
+    // Servidores del episodio (misma estructura que películas)
     const downloadLinks = [];
     
+    // Buscar en #playeroptionsul (mismo que películas)
     $('#playeroptionsul .dooplay_player_option').each((i, el) => {
       const dataOption = $(el).attr('data-option');
       const serverName = $(el).text().trim().replace(/Recomendado$/, '').trim();
+      
       if (dataOption && dataOption !== '#') {
         const match = dataOption.match(/zopass=([^&]+)/);
         if (match && match[1]) {
           try {
             const decodedUrl = Buffer.from(match[1], 'base64').toString('utf-8');
-            downloadLinks.push({ server: serverName, url: decodedUrl, type: 'iframe' });
+            downloadLinks.push({ server: serverName || `Servidor ${i+1}`, url: decodedUrl, type: 'iframe' });
+            console.log(`✅ Servidor encontrado: ${serverName}`);
           } catch(e) {
-            downloadLinks.push({ server: serverName, url: dataOption, type: 'iframe' });
+            downloadLinks.push({ server: serverName || `Servidor ${i+1}`, url: dataOption, type: 'iframe' });
           }
         } else {
-          downloadLinks.push({ server: serverName, url: dataOption, type: 'iframe' });
+          downloadLinks.push({ server: serverName || `Servidor ${i+1}`, url: dataOption, type: 'iframe' });
         }
       }
     });
     
+    // También buscar enlaces de descarga
+    $('#sbss a').each((i, el) => {
+      const href = $(el).attr('href');
+      const serverName = $(el).find('li').text().trim() || 'Descarga';
+      if (href && href !== '#') {
+        downloadLinks.push({ server: serverName, url: href, type: 'download' });
+      }
+    });
+    
+    console.log(`✅ ${downloadLinks.length} servidores encontrados para el episodio`);
+    
     return {
       title: title,
-      downloadLinks: downloadLinks
+      downloadLinks: downloadLinks,
+      episodes: [] // Para que el frontend maneje episodios
     };
   } catch (error) {
     console.error('Error en getEpisodeInfo:', error.message);
     return null;
   }
 }
+
+
+
 }
 
 module.exports = new ScraperService();
