@@ -38,6 +38,18 @@ app.get('/api/v1/movies/info', async (req, res) => {
   }
 });
 
+app.get('/api/v1/movies/episode', async (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.status(400).json({ error: 'Se requiere url' });
+  
+  try {
+    const data = await scraperService.getEpisodeInfo(url);
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../../frontend/index.html'));
 });

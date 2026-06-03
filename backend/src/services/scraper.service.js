@@ -284,6 +284,51 @@ class ScraperService {
       return null;
     }
   }
+
+
+// ==================== EPISODIOS ====================
+async getEpisodeInfo(episodeUrl) {
+  try {
+    console.log(`📄 Obteniendo episodio de: ${episodeUrl}`);
+    const response = await axios.get(episodeUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      timeout: 15000
+    });
+    const $ = cheerio.load(response.data);
+    
+    // Título del episodio
+    const title = $('h1').first().text().trim() || 'Episodio';
+    
+    // Servidores del episodio
+    const downloadLinks = [];
+    
+    $('#playeroptionsul .dooplay_player_option').each((i, el) => {
+      const dataOption = $(el).attr('data-option');
+      const serverName = $(el).text().trim().replace(/Recomendado$/, '').trim();
+      if (dataOption && dataOption !== '#') {
+        const match = dataOption.match(/zopass=([^&]+)/);
+        if (match && match[1]) {
+          try {
+            const decodedUrl = Buffer.from(match[1], 'base64').toString('utf-8');
+            downloadLinks.push({ server: serverName, url: decodedUrl, type: 'iframe' });
+          } catch(e) {
+            downloadLinks.push({ server: serverName, url: dataOption, type: 'iframe' });
+          }
+        } else {
+          downloadLinks.push({ server: serverName, url: dataOption, type: 'iframe' });
+        }
+      }
+    });
+    
+    return {
+      title: title,
+      downloadLinks: downloadLinks
+    };
+  } catch (error) {
+    console.error('Error en getEpisodeInfo:', error.message);
+    return null;
+  }
+}
 }
 
 module.exports = new ScraperService();
