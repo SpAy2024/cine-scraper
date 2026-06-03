@@ -264,98 +264,110 @@
         return response;
     }
 
-    async function searchMovies() {
-        const query = document.getElementById('searchInput').value.trim();
-        if (!query) return alert('Escribe una película');
-        
-        const grid = document.getElementById('moviesGrid');
-        grid.innerHTML = '<div class="loading">🔍 Buscando...</div>';
-        
-        try {
-            const response = await fetchWithAuth(`${API_URL}/search?q=${encodeURIComponent(query)}`);
-            const data = await response.json();
-            
-            console.log('Respuesta:', data);
-            
-            if (!data.results || data.results.length === 0) {
-                grid.innerHTML = '<div class="no-results">😞 No se encontraron resultados</div>';
-                return;
-            }
-            
-            // Filtrar SOLO resultados que tienen URL (de Cinecalidad)
-            const validResults = data.results.filter(movie => movie.url && movie.url.includes('cinecalidad'));
-            
-            if (validResults.length === 0) {
-                grid.innerHTML = '<div class="no-results">😞 No se encontraron enlaces disponibles</div>';
-                return;
-            }
-            
-            grid.innerHTML = '';
-            validResults.forEach(movie => {
-                const card = document.createElement('div');
-                card.className = 'movie-card';
-                card.innerHTML = `
-                    ${movie.thumbnail ? `<img src="${movie.thumbnail}" alt="${movie.title}">` : '<div class="no-image">🎬</div>'}
-                    <h3>${movie.title}</h3>
-                `;
-                card.onclick = () => getMovieInfo(movie.url);
-                grid.appendChild(card);
-            });
-        } catch (error) {
-            console.error('Error:', error);
-            grid.innerHTML = '<div class="no-results">❌ Error al buscar</div>';
-        }
-    }
+   async function searchMovies() {
+    const query = document.getElementById('searchInput').value.trim();
+    if (!query) return alert('Escribe una película');
     
-    async function getMovieInfo(url) {
-        const modal = document.getElementById('modal');
-        const modalBody = document.getElementById('modalBody');
-        modalBody.innerHTML = '<div class="loading">🎬 Cargando información...</div>';
-        modal.style.display = 'block';
+    const grid = document.getElementById('moviesGrid');
+    grid.innerHTML = '<div class="loading">🔍 Buscando...</div>';
+    
+    try {
+        const response = await fetchWithAuth(`${API_URL}/search?q=${encodeURIComponent(query)}`);
+        const data = await response.json();
         
-        try {
-            const response = await fetchWithAuth(`${API_URL}/info?url=${encodeURIComponent(url)}`);
-            const data = await response.json();
+        console.log('Respuesta:', data);
+        
+        if (!data.results || data.results.length === 0) {
+            grid.innerHTML = '<div class="no-results">😞 No se encontraron resultados</div>';
+            return;
+        }
+        
+        // Mostrar TODOS los resultados que tienen URL (cinecalidad, pelisplus, etc.)
+        const validResults = data.results.filter(movie => movie.url);
+        
+        if (validResults.length === 0) {
+            grid.innerHTML = '<div class="no-results">😞 No se encontraron enlaces disponibles</div>';
+            return;
+        }
+        
+        grid.innerHTML = '';
+        validResults.forEach(movie => {
+            const card = document.createElement('div');
+            card.className = 'movie-card';
             
-            console.log('Info respuesta:', data);
+            // Usar thumbnail o poster
+            const posterImg = movie.thumbnail || movie.poster;
             
-            if (!data.data) throw new Error('No hay datos');
-            
-            const movie = data.data;
-            modalBody.innerHTML = `
-                <div class="video-container">
-                    <div id="playerFrame" style="height:56vh; background:#000; display:flex; align-items:center; justify-content:center; color:#888;">
-                        Selecciona un servidor
-                    </div>
-                </div>
-                <div class="modal-info">
-                    <h2>${movie.title}</h2>
-                    <p>${movie.synopsis || 'Sinopsis no disponible'}</p>
-                    <div class="servers-grid" id="serversGrid"></div>
-                </div>
+            card.innerHTML = `
+                ${posterImg ? `<img src="${posterImg}" alt="${movie.title}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">` : '<div class="no-image">🎬</div>'}
+                ${!posterImg ? '<div class="no-image">🎬</div>' : ''}
+                <h3>${movie.title.substring(0, 50)}${movie.title.length > 50 ? '...' : ''}</h3>
             `;
-            
-            const serversGrid = document.getElementById('serversGrid');
-            if (movie.downloadLinks && movie.downloadLinks.length > 0) {
-                movie.downloadLinks.forEach(server => {
-                    const btn = document.createElement('button');
-                    btn.className = 'server-btn';
-                    btn.textContent = server.server;
-                    btn.onclick = () => {
-                        const frame = document.getElementById('playerFrame');
-                        frame.innerHTML = `<iframe src="${server.url}" frameborder="0" allowfullscreen allow="autoplay; encrypted-media" style="width:100%; height:100%;"></iframe>`;
-                    };
-                    serversGrid.appendChild(btn);
-                });
-            } else {
-                serversGrid.innerHTML = '<div class="no-results">⚠️ No hay servidores disponibles</div>';
-            }
-        } catch (error) {
-            console.error('Error:', error);
-            modalBody.innerHTML = `<div class="no-results">❌ Error: ${error.message}</div>`;
-        }
+            card.onclick = () => getMovieInfo(movie.url);
+            grid.appendChild(card);
+        });
+    } catch (error) {
+        console.error('Error:', error);
+        grid.innerHTML = '<div class="no-results">❌ Error al buscar</div>';
     }
+}
+
+   async function getMovieInfo(url) {
+    const modal = document.getElementById('modal');
+    const modalBody = document.getElementById('modalBody');
+    modalBody.innerHTML = '<div class="loading">🎬 Cargando información...</div>';
+    modal.style.display = 'block';
     
+    try {
+        const response = await fetchWithAuth(`${API_URL}/info?url=${encodeURIComponent(url)}`);
+        const data = await response.json();
+        
+        console.log('Info respuesta:', data);
+        
+        if (!data.data) throw new Error('No hay datos');
+        
+        const movie = data.data;
+        
+        // Poster de la película
+        const posterUrl = movie.poster || movie.thumbnail;
+        
+        modalBody.innerHTML = `
+            <div class="video-container">
+                <div id="playerFrame" style="height:56vh; background:#000; display:flex; align-items:center; justify-content:center; color:#888;">
+                    Selecciona un servidor
+                </div>
+            </div>
+            <div class="modal-info">
+                ${posterUrl ? `<img src="${posterUrl}" style="width:100px; float:right; border-radius:8px; margin-left:15px;" alt="${movie.title}">` : ''}
+                <h2>${movie.title}</h2>
+                ${movie.year ? `<p><strong>Año:</strong> ${movie.year}</p>` : ''}
+                <p>${movie.synopsis || 'Sinopsis no disponible'}</p>
+                <div class="servers-grid" id="serversGrid"></div>
+            </div>
+        `;
+        
+        const serversGrid = document.getElementById('serversGrid');
+        if (movie.downloadLinks && movie.downloadLinks.length > 0) {
+            movie.downloadLinks.forEach(server => {
+                const btn = document.createElement('button');
+                btn.className = 'server-btn';
+                btn.textContent = server.server || 'Servidor';
+                btn.onclick = () => {
+                    const frame = document.getElementById('playerFrame');
+                    frame.innerHTML = `<iframe src="${server.url}" frameborder="0" allowfullscreen allow="autoplay; encrypted-media" style="width:100%; height:100%;"></iframe>`;
+                };
+                serversGrid.appendChild(btn);
+            });
+        } else {
+            serversGrid.innerHTML = '<div class="no-results">⚠️ No hay servidores disponibles</div>';
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        modalBody.innerHTML = `<div class="no-results">❌ Error: ${error.message}</div>`;
+    }
+}
+
+
     function closeModal() {
         document.getElementById('modal').style.display = 'none';
     }

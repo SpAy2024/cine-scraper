@@ -1,7 +1,7 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 
-const TMDB_API_KEY = 'e416234abcb5d260538a8f7ce6ba12e4';
+const TMDB_API_KEY = '55c0bb848e296dd8d81046079236067d';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 
 class ScraperService {
