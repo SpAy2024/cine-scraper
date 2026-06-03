@@ -251,37 +251,46 @@
         ? 'http://localhost:3001/api/v1/movies'
         : '/api/v1/movies';
 
-    async function searchMovies() {
-        const query = document.getElementById('searchInput').value.trim();
-        if (!query) return alert('Escribe una película');
+  async function searchMovies() {
+    const query = document.getElementById('searchInput').value.trim();
+    if (!query) return alert('Escribe una película');
+    
+    const grid = document.getElementById('moviesGrid');
+    grid.innerHTML = '<div class="loading">🔍 Buscando...</div>';
+    
+    try {
+        const response = await fetch(`${API_URL}/search?q=${encodeURIComponent(query)}`);
+        const data = await response.json();
         
-        const grid = document.getElementById('moviesGrid');
-        grid.innerHTML = '<div class="loading">🔍 Buscando...</div>';
-        
-        try {
-            const response = await fetch(`${API_URL}/search?q=${encodeURIComponent(query)}`);
-            const data = await response.json();
-            
-            if (!data.results || data.results.length === 0) {
-                grid.innerHTML = '<div class="no-results">😞 No se encontraron resultados</div>';
-                return;
-            }
-            
-            grid.innerHTML = '';
-            data.results.forEach(movie => {
-                const card = document.createElement('div');
-                card.className = 'movie-card';
-                card.innerHTML = `
-                    ${movie.thumbnail ? `<img src="${movie.thumbnail}" alt="${movie.title}">` : '<div class="no-image">🎬</div>'}
-                    <h3>${movie.title}</h3>
-                `;
-                card.onclick = () => getMovieInfo(movie.url);
-                grid.appendChild(card);
-            });
-        } catch (error) {
-            grid.innerHTML = '<div class="no-results">❌ Error al buscar</div>';
+        if (!data.results || data.results.length === 0) {
+            grid.innerHTML = '<div class="no-results">😞 No se encontraron resultados</div>';
+            return;
         }
+        
+        // Filtrar SOLO resultados que tienen URL (de Cinecalidad)
+        const validResults = data.results.filter(movie => movie.url && movie.url.includes('cinecalidad'));
+        
+        if (validResults.length === 0) {
+            grid.innerHTML = '<div class="no-results">😞 No se encontraron enlaces disponibles</div>';
+            return;
+        }
+        
+        grid.innerHTML = '';
+        validResults.forEach(movie => {
+            const card = document.createElement('div');
+            card.className = 'movie-card';
+            card.innerHTML = `
+                ${movie.thumbnail ? `<img src="${movie.thumbnail}" alt="${movie.title}">` : '<div class="no-image">🎬</div>'}
+                <h3>${movie.title}</h3>
+            `;
+            card.onclick = () => getMovieInfo(movie.url);
+            grid.appendChild(card);
+        });
+    } catch (error) {
+        grid.innerHTML = '<div class="no-results">❌ Error al buscar</div>';
+        console.error(error);
     }
+}
     
     async function getMovieInfo(url) {
         const modal = document.getElementById('modal');
