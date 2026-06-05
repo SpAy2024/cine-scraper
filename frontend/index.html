@@ -272,7 +272,10 @@ async function searchMovies() {
     grid.innerHTML = '<div class="loading">🔍 Buscando...</div>';
     
     try {
-        const response = await fetchWithAuth(`${API_URL}/search?q=${encodeURIComponent(query)}`);
+        // Intentar primero buscar por ID si el query es número
+        let url = `${API_URL}/search?q=${encodeURIComponent(query)}&apiKey=${API_KEY}`;
+        
+        const response = await fetchWithAuth(url);
         const data = await response.json();
         
         console.log('Respuesta:', data);
@@ -282,7 +285,7 @@ async function searchMovies() {
             return;
         }
         
-        // 🔥 AHORA FILTRAR RESULTADOS DE POSEIDON (no cinecalidad)
+        // Mostrar resultados con URL
         const validResults = data.results.filter(movie => movie.url);
         
         if (validResults.length === 0) {
@@ -306,6 +309,7 @@ async function searchMovies() {
         grid.innerHTML = '<div class="no-results">❌ Error al buscar</div>';
     }
 }
+
 
    async function getMovieInfo(url) {
     const modal = document.getElementById('modal');
