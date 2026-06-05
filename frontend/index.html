@@ -264,8 +264,7 @@
         return response;
     }
 
-
-  async function searchMovies() {
+   async function searchMovies() {
     const query = document.getElementById('searchInput').value.trim();
     if (!query) return alert('Escribe una película');
     
@@ -307,48 +306,7 @@
         grid.innerHTML = '<div class="no-results">❌ Error al buscar</div>';
     }
 }
-    const query = document.getElementById('searchInput').value.trim();
-    if (!query) return alert('Escribe una película');
-    
-    const grid = document.getElementById('moviesGrid');
-    grid.innerHTML = '<div class="loading">🔍 Buscando...</div>';
-    
-    try {
-        const response = await fetchWithAuth(`${API_URL}/search?q=${encodeURIComponent(query)}`);
-        const data = await response.json();
-        
-        console.log('Respuesta:', data);
-        
-        if (!data.results || data.results.length === 0) {
-            grid.innerHTML = '<div class="no-results">😞 No se encontraron resultados</div>';
-            return;
-        }
-        
-        // ✅ Mostrar TODOS los resultados que tienen URL
-        const validResults = data.results.filter(movie => movie.url);
-        
-        if (validResults.length === 0) {
-            grid.innerHTML = '<div class="no-results">😞 No se encontraron enlaces disponibles</div>';
-            return;
-        }
-        
-        grid.innerHTML = '';
-        validResults.forEach(movie => {
-            const card = document.createElement('div');
-            card.className = 'movie-card';
-            card.innerHTML = `
-                ${movie.thumbnail ? `<img src="${movie.thumbnail}" alt="${movie.title}" onerror="this.style.display='none'">` : '<div class="no-image">🎬</div>'}
-                <h3>${movie.title.substring(0, 40)}${movie.title.length > 40 ? '...' : ''}</h3>
-            `;
-            card.onclick = () => getMovieInfo(movie.url);
-            grid.appendChild(card);
-        });
-    } catch (error) {
-        console.error('Error:', error);
-        grid.innerHTML = '<div class="no-results">❌ Error al buscar</div>';
-    }
-
-
+  
 
    async function getMovieInfo(url) {
     const modal = document.getElementById('modal');
