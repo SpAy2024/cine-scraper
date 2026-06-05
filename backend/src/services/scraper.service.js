@@ -44,90 +44,103 @@ class ScraperService {
   
   // ==================== POSEIDONHD2 ====================
   async searchPoseidon(query) {
-    const results = [];
-    const queryLower = query.toLowerCase();
-    
-    try {
-      // PoseidonHD2 usa búsqueda por ID de TMDB o por título
-      const searchUrl = `https://www.poseidonhd2.co/buscar?q=${encodeURIComponent(query)}`;
-      console.log(`🔍 Buscando en PoseidonHD2: ${searchUrl}`);
-      
-      const response = await axios.get(searchUrl, {
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        timeout: 15000
-      });
-      const $ = cheerio.load(response.data);
-      
-      // Buscar películas y series
-      $('a[href*="/pelicula/"], a[href*="/serie/"]').each((i, el) => {
-        let url = $(el).attr('href');
-        let title = $(el).find('h3, .title, .entry-title').text().trim();
-        if (!title) title = $(el).text().trim();
-        
-        if (title && title.toLowerCase().includes(queryLower)) {
-          let type = 'movie';
-          if (url.includes('/serie/')) type = 'serie';
-          
-          results.push({
-            id: null,
-            title: title,
-            url: url,
-            thumbnail: $(el).find('img').attr('src'),
-            provider: 'poseidon',
-            type: type
-          });
+  const results = [];
+  const queryLower = query.toLowerCase();
+  
+  try {
+    // Si el query es un número (ID de TMDB), buscar directamente
+    if (/^\d+$/.test(query)) {
+      const url = `https://www.poseidonhd2.co/pelicula/${query}/ballistic`;
+      console.log(`🔍 Probando URL por ID: ${url}`);
+      try {
+        const response = await axios.get(url, {
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          timeout: 15000
+        });
+        if (response.status === 200) {
+          const $ = cheerio.load(response.data);
+          const title = $('h1').first().text().trim();
+          if (title) {
+            results.push({
+              id: query,
+              title: title,
+              url: url,
+              thumbnail: null,
+              provider: 'poseidon',
+              type: 'movie'
+            });
+            console.log(`✅ Encontrada por ID: ${title}`);
+            return results;
+          }
         }
-      });
-      
-      // Si no hay resultados, buscar por ID de TMDB
-      if (results.length === 0) {
-        const tmdbResults = await this.searchTMDB(query);
-        for (const tmdb of tmdbResults) {
-          results.push({
-            id: tmdb.id,
-            title: tmdb.title,
-            url: `https://www.poseidonhd2.co/pelicula/${tmdb.id}/${tmdb.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
-            thumbnail: tmdb.poster,
-            provider: 'poseidon',
-            type: 'movie'
-          });
-        }
+      } catch(e) {
+        console.log(`Error con ID ${query}:`, e.message);
       }
-      
-      console.log(`✅ PoseidonHD2: ${results.length} resultados`);
-      return results;
-    } catch (error) {
-      console.log('Error en PoseidonHD2:', error.message);
-      return [];
     }
+    
+    // Si es texto, buscar normalmente
+    const searchUrl = `https://www.poseidonhd2.co/buscar?q=${encodeURIComponent(query)}`;
+    console.log(`🔍 Buscando en Poseidon: ${searchUrl}`);
+    const response = await axios.get(searchUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      timeout: 15000
+    });
+    const $ = cheerio.load(response.data);
+    
+    $('a[href*="/pelicula/"]').each((i, el) => {
+      let url = $(el).attr('href');
+      let title = $(el).find('h3, .title').text().trim();
+      if (!title) title = $(el).text().trim();
+      
+      if (title && title.toLowerCase().includes(queryLower)) {
+        if (url && !url.startsWith('http')) {
+          url = 'https://www.poseidonhd2.co' + url;
+        }
+        results.push({
+          id: null,
+          title: title,
+          url: url,
+          thumbnail: $(el).find('img').attr('src'),
+          provider: 'poseidon',
+          type: 'movie'
+        });
+      }
+    });
+    
+    console.log(`✅ Poseidon: ${results.length} resultados`);
+    return results;
+  } catch (error) {
+    console.log('Error en Poseidon:', error.message);
+    return [];
   }
+}
   
   // ==================== BÚSQUEDA COMBINADA ====================
   async search(query) {
-    console.log(`🔍 Buscando: "${query}"`);
-    
-    // Buscar en PoseidonHD2
-    const poseidonResults = await this.searchPoseidon(query);
-    if (poseidonResults.length > 0) {
-      console.log(`✅ ${poseidonResults.length} resultados de PoseidonHD2`);
-      return poseidonResults;
-    }
-    
-    // Si no hay resultados, buscar en TMDB
-    const tmdbMovies = await this.searchTMDB(query, 'movie');
-    const tmdbSeries = await this.searchTMDB(query, 'tv');
-    const allTmdb = [...tmdbMovies, ...tmdbSeries];
-    
-    return allTmdb.map(tm => ({
-      id: tm.id,
-      title: tm.title,
-      year: tm.year,
-      url: null,
-      thumbnail: tm.poster,
-      provider: 'tmdb',
-      type: tm.type === 'tv' ? 'serie' : 'movie'
-    }));
+  console.log(`🔍 Buscando: "${query}"`);
+  
+  // Buscar en PoseidonHD2
+  const poseidonResults = await this.searchPoseidon(query);
+  if (poseidonResults.length > 0) {
+    console.log(`✅ ${poseidonResults.length} resultados de PoseidonHD2`);
+    return poseidonResults;
   }
+  
+  // Si no hay resultados, buscar en TMDB
+  const tmdbMovies = await this.searchTMDB(query, 'movie');
+  const tmdbSeries = await this.searchTMDB(query, 'tv');
+  const allTmdb = [...tmdbMovies, ...tmdbSeries];
+  
+  return allTmdb.map(tm => ({
+    id: tm.id,
+    title: tm.title,
+    year: tm.year,
+    url: null,
+    thumbnail: tm.poster,
+    provider: 'tmdb',
+    type: tm.type === 'tv' ? 'serie' : 'movie'
+  }));
+}
   
   // ==================== OBTENER INFORMACIÓN ====================
   async getInfo(url) {
