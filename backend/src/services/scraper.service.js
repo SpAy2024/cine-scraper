@@ -1,24 +1,10 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-const puppeteer = require('puppeteer');
 
 const TMDB_API_KEY = 'e416234abcb5d260538a8f7ce6ba12e4';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 
 class ScraperService {
-  constructor() {
-    this.browser = null;
-  }
-  
-  async getBrowser() {
-    if (!this.browser) {
-      this.browser = await puppeteer.launch({
-        headless: 'new',
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-      });
-    }
-    return this.browser;
-  }
   
   // ==================== TMDB ====================
   async searchTMDB(query, type = 'movie') {
@@ -57,50 +43,93 @@ class ScraperService {
   }
   
   // ==================== LAMOVIE ====================
-  async searchLamovie(query) {
-    const results = [];
-    const queryLower = query.toLowerCase();
+ async searchLamovie(query) {
+  const results = [];
+  const queryLower = query.toLowerCase();
+  
+  try {
+    // 1. PRIMERO: Buscar en TMDB para obtener el ID
+    const tmdbResults = await this.searchTMDB(query);
     
-    try {
-      // Construir slug para URL directa
-      const slug = queryLower
+    for (const tmdb of tmdbResults) {
+      // Construir URL de Lamovie con el título y año
+      const slug = tmdb.title
+        .toLowerCase()
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/-+/g, '-')
         .replace(/^-|-$/g, '');
       
-      // URL correcta de Lamovie (con /peliculas/ no /movies/)
-      const url = `https://lamovie.org/peliculas/${slug}/`;
-      console.log(`🔍 Probando URL directa: ${url}`);
+      const year = tmdb.year || '';
+      const url = `https://lamovie.org/peliculas/${slug}-${year}/`;
       
-      const response = await axios.get(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        timeout: 15000
-      });
+      console.log(`🔍 Probando URL: ${url}`);
       
-      if (response.status === 200) {
-        const $ = cheerio.load(response.data);
-        const title = $('h1').first().text().trim();
+      try {
+        const response = await axios.get(url, {
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          timeout: 10000
+        });
         
-        if (title) {
-          results.push({
-            id: null,
-            title: title,
-            url: url,
-            thumbnail: null,
-            provider: 'lamovie',
-            type: 'movie'
-          });
-          console.log(`✅ Encontrada: ${title}`);
-          return results;
+        if (response.status === 200) {
+          const $ = cheerio.load(response.data);
+          const title = $('h1').first().text().trim();
+          
+          if (title) {
+            results.push({
+              id: tmdb.id,
+              title: title,
+              url: url,
+              thumbnail: tmdb.poster,
+              provider: 'lamovie',
+              type: 'movie',
+              year: year
+            });
+            console.log(`✅ Encontrada: ${title} -> ${url}`);
+            return results;
+          }
         }
+      } catch(e) {
+        console.log(`❌ URL falló: ${url}`);
       }
-    } catch (error) {
-      console.log('Error en Lamovie:', error.message);
     }
     
+    // 2. Si no funciona, buscar directamente
+    const searchUrl = `https://lamovie.org/buscar?q=${encodeURIComponent(query)}`;
+    console.log(`🔍 Buscando en Lamovie: ${searchUrl}`);
+    const response = await axios.get(searchUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      timeout: 15000
+    });
+    const $ = cheerio.load(response.data);
+    
+    $('a[href*="/peliculas/"]').each((i, el) => {
+      let url = $(el).attr('href');
+      let title = $(el).find('h3, .title').text().trim();
+      if (!title) title = $(el).text().trim();
+      
+      if (title && title.toLowerCase().includes(queryLower)) {
+        if (url && !url.startsWith('http')) {
+          url = 'https://lamovie.org' + url;
+        }
+        results.push({
+          id: null,
+          title: title,
+          url: url,
+          thumbnail: $(el).find('img').attr('src'),
+          provider: 'lamovie',
+          type: 'movie'
+        });
+      }
+    });
+    
+    console.log(`✅ Lamovie: ${results.length} resultados`);
     return results;
+  } catch (error) {
+    console.log('Error en Lamovie:', error.message);
+    return [];
   }
+}
   
   // ==================== BÚSQUEDA COMBINADA ====================
   async search(query) {
@@ -131,15 +160,17 @@ class ScraperService {
   
   // ==================== OBTENER INFORMACIÓN ====================
   async getInfo(url) {
+    // Detectar Lamovie
     if (url.includes('lamovie.org')) {
       console.log(`🎬 Detectado como Lamovie: ${url}`);
       return await this.getLamovieInfo(url);
     }
+    
     return null;
   }
   
-  // ==================== LAMOVIE INFO (CON PUPPETEER) ====================
-  async getLamovieInfo(url) {
+  // ==================== LAMOVIE INFO ====================
+async getLamovieInfo(url) {
   try {
     console.log(`📄 Obteniendo info de Lamovie: ${url}`);
     const response = await axios.get(url, {
