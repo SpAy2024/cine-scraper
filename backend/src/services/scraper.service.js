@@ -43,62 +43,81 @@ class ScraperService {
   }
   
   // ==================== PELISFLIX1.QUEST ====================
-  async searchPelisflix(query) {
-    const results = [];
-    const queryLower = query.toLowerCase();
+ async searchPelisflix(query) {
+  const results = [];
+  const queryLower = query.toLowerCase();
+  
+  try {
+    const searchUrl = `https://pelisflix1.quest/?s=${encodeURIComponent(query)}`;
+    console.log(`🔍 Buscando en Pelisflix: ${searchUrl}`);
+    const response = await axios.get(searchUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      timeout: 15000
+    });
+    const $ = cheerio.load(response.data);
     
-    try {
-      const searchUrl = `https://pelisflix1.quest/?s=${encodeURIComponent(query)}`;
-      console.log(`🔍 Buscando en Pelisflix: ${searchUrl}`);
-      const response = await axios.get(searchUrl, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-        timeout: 15000
-      });
-      const $ = cheerio.load(response.data);
+    // Buscar películas
+    $('a[href*="/pelicula/"]').each((i, el) => {
+      let url = $(el).attr('href');
+      let title = $(el).find('h3, .title, .entry-title').text().trim();
+      if (!title) title = $(el).text().trim();
       
-      // Buscar películas
-      $('a[href*="/pelicula/"]').each((i, el) => {
-        const url = $(el).attr('href');
-        let title = $(el).find('h3, .title, .entry-title').text().trim();
-        if (!title) title = $(el).text().trim();
-        
-        if (title && title.toLowerCase().includes(queryLower)) {
-          results.push({
-            id: null,
-            title: title,
-            url: url,
-            thumbnail: $(el).find('img').attr('src'),
-            provider: 'pelisflix',
-            type: 'movie'
-          });
-        }
-      });
+      // Completar URL relativa
+      if (url && url.startsWith('/')) {
+        url = `https://pelisflix1.quest${url}`;
+      }
       
-      // Buscar series (episodios)
-      $('a[href*="/episodio/"]').each((i, el) => {
-        const url = $(el).attr('href');
-        let title = $(el).find('h3, .title, .entry-title').text().trim();
-        if (!title) title = $(el).text().trim();
-        
-        if (title && title.toLowerCase().includes(queryLower)) {
-          results.push({
-            id: null,
-            title: title,
-            url: url,
-            thumbnail: $(el).find('img').attr('src'),
-            provider: 'pelisflix',
-            type: 'episode'
-          });
-        }
-      });
+      if (title && title.toLowerCase().includes(queryLower)) {
+        results.push({
+          id: null,
+          title: title,
+          url: url,
+          thumbnail: $(el).find('img').attr('src'),
+          provider: 'pelisflix',
+          type: 'movie'
+        });
+      }
+    });
+    
+    // Buscar episodios
+    $('a[href*="/episodio/"]').each((i, el) => {
+      let url = $(el).attr('href');
+      let title = $(el).find('h3, .title, .entry-title').text().trim();
+      if (!title) title = $(el).text().trim();
       
-      console.log(`✅ Pelisflix: ${results.length} resultados`);
-    } catch (error) {
-      console.log('Error en Pelisflix:', error.message);
+      if (url && url.startsWith('/')) {
+        url = `https://pelisflix1.quest${url}`;
+      }
+      
+      if (title && title.toLowerCase().includes(queryLower)) {
+        results.push({
+          id: null,
+          title: title,
+          url: url,
+          thumbnail: $(el).find('img').attr('src'),
+          provider: 'pelisflix',
+          type: 'episode'
+        });
+      }
+    });
+    
+    // Eliminar duplicados por URL
+    const uniqueResults = [];
+    const seenUrls = new Set();
+    for (const result of results) {
+      if (!seenUrls.has(result.url)) {
+        seenUrls.add(result.url);
+        uniqueResults.push(result);
+      }
     }
     
-    return results;
+    console.log(`✅ Pelisflix: ${uniqueResults.length} resultados`);
+    return uniqueResults;
+  } catch (error) {
+    console.log('Error en Pelisflix:', error.message);
+    return [];
   }
+}
   
   // ==================== BÚSQUEDA COMBINADA ====================
   async search(query) {
@@ -145,43 +164,65 @@ class ScraperService {
   }
   
   // ==================== PELISFLIX INFO ====================
-  async getPelisflixInfo(url) {
-    try {
-      console.log(`📄 Obteniendo info de Pelisflix: ${url}`);
-      const response = await axios.get(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        timeout: 15000
-      });
-      const $ = cheerio.load(response.data);
+async getPelisflixInfo(url) {
+  try {
+    console.log(`📄 Obteniendo info de Pelisflix: ${url}`);
+    const response = await axios.get(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      timeout: 15000
+    });
+    const $ = cheerio.load(response.data);
+    
+    // Título
+    const title = $('h1').first().text().trim() || 'Sin título';
+    
+    // Año
+    let year = null;
+    $('.year, .date').each((i, el) => {
+      const match = $(el).text().match(/\b(19|20)\d{2}\b/);
+      if (match) year = match[0];
+    });
+    
+    // Sinopsis
+    let synopsis = '';
+    $('p').each((i, el) => {
+      const text = $(el).text().trim();
+      if (text.length > 200 && !text.includes('Ver') && !text.includes('Recuerda')) {
+        synopsis = text;
+        return false;
+      }
+    });
+    
+    // Poster
+    let poster = $('.TPostBg, img').first().attr('src');
+    if (poster && poster.startsWith('//')) poster = 'https:' + poster;
+    
+    // ==================== SERVIDORES ====================
+    const downloadLinks = [];
+    
+    // Buscar divs con data-url (en base64)
+    $('[data-url]').each((i, el) => {
+      const dataUrl = $(el).attr('data-url');
+      const serverName = $(el).find('.nmopt').first().text().trim() || $(el).find('span').first().text().trim();
+      const idioma = $(el).closest('.drpdn').find('.bstd span:first-child').text().trim() || 'Latino';
       
-      // Título
-      const title = $('h1').first().text().trim() || 'Sin título';
-      
-      // Año
-      let year = null;
-      $('.year, .date').each((i, el) => {
-        const match = $(el).text().match(/\b(19|20)\d{2}\b/);
-        if (match) year = match[0];
-      });
-      
-      // Sinopsis
-      let synopsis = '';
-      $('p').each((i, el) => {
-        const text = $(el).text().trim();
-        if (text.length > 200 && text.includes('Ver') === false) {
-          synopsis = text;
-          return false;
+      if (dataUrl && dataUrl !== '#') {
+        try {
+          // Decodificar base64 a URL real
+          const decodedUrl = Buffer.from(dataUrl, 'base64').toString('utf-8');
+          downloadLinks.push({
+            server: `${idioma} - ${serverName || `Servidor ${i+1}`}`,
+            url: decodedUrl,
+            type: 'iframe'
+          });
+        } catch(e) {
+          console.log(`Error decodificando URL: ${e.message}`);
         }
-      });
-      
-      // Poster
-      let poster = $('img').first().attr('src');
-      if (poster && !poster.startsWith('http')) poster = null;
-      
-      // Servidores
-      const downloadLinks = [];
-      
-      // Buscar iframes
+      }
+    });
+    
+    // También buscar iframes como fallback
+    if (downloadLinks.length === 0) {
       $('iframe').each((i, el) => {
         const src = $(el).attr('src');
         if (src && src.startsWith('http')) {
@@ -192,37 +233,25 @@ class ScraperService {
           });
         }
       });
-      
-      // Buscar enlaces de video
-      $('a[href*="stream"], a[href*="video"], a[href*="play"]').each((i, el) => {
-        const href = $(el).attr('href');
-        if (href && href.startsWith('http')) {
-          downloadLinks.push({
-            server: $(el).text().trim() || `Enlace ${i+1}`,
-            url: href,
-            type: 'link'
-          });
-        }
-      });
-      
-      console.log(`✅ Pelisflix: ${downloadLinks.length} servidores`);
-      
-      return {
-        title: title,
-        synopsis: synopsis.substring(0, 500) || 'Sinopsis no disponible',
-        year: year,
-        url: url,
-        provider: 'pelisflix',
-        poster: poster,
-        downloadLinks: downloadLinks,
-        type: url.includes('/episodio/') ? 'episode' : 'movie'
-      };
-    } catch (error) {
-      console.error('Error en getPelisflixInfo:', error.message);
-      return null;
     }
+    
+    console.log(`✅ Pelisflix: ${downloadLinks.length} servidores encontrados`);
+    
+    return {
+      title: title,
+      synopsis: synopsis.substring(0, 500) || 'Sinopsis no disponible',
+      year: year,
+      url: url,
+      provider: 'pelisflix',
+      poster: poster,
+      downloadLinks: downloadLinks,
+      type: url.includes('/episodio/') ? 'episode' : 'movie'
+    };
+  } catch (error) {
+    console.error('Error en getPelisflixInfo:', error.message);
+    return null;
   }
-  
+}
   // ==================== EPISODIOS ====================
   async getEpisodeInfo(episodeUrl) {
     try {
