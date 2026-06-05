@@ -264,7 +264,8 @@
         return response;
     }
 
-async function searchMovies() {
+
+  async function searchMovies() {
     const query = document.getElementById('searchInput').value.trim();
     if (!query) return alert('Escribe una película');
     
@@ -272,10 +273,7 @@ async function searchMovies() {
     grid.innerHTML = '<div class="loading">🔍 Buscando...</div>';
     
     try {
-        // Intentar primero buscar por ID si el query es número
-        let url = `${API_URL}/search?q=${encodeURIComponent(query)}&apiKey=${API_KEY}`;
-        
-        const response = await fetchWithAuth(url);
+        const response = await fetchWithAuth(`${API_URL}/search?q=${encodeURIComponent(query)}`);
         const data = await response.json();
         
         console.log('Respuesta:', data);
@@ -285,8 +283,8 @@ async function searchMovies() {
             return;
         }
         
-        // Mostrar resultados con URL
-        const validResults = data.results.filter(movie => movie.url && movie.provider === 'poseidon');
+        // ✅ Mostrar TODOS los resultados que tienen URL
+        const validResults = data.results.filter(movie => movie.url);
         
         if (validResults.length === 0) {
             grid.innerHTML = '<div class="no-results">😞 No se encontraron enlaces disponibles</div>';

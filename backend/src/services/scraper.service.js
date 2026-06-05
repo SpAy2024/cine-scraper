@@ -42,116 +42,127 @@ class ScraperService {
     }
   }
   
-  // ==================== POSEIDONHD2 ====================ohohhhhhhhhhhhhhh
-// ==================== POSEIDONHD2 ====================
-async searchPoseidon(query) {
-  const results = [];
-  
-  try {
-    // 1. PRIMERO: Buscar en TMDB para obtener el ID y título
-    const tmdbResults = await this.searchTMDB(query);
+  // ==================== LAMOVIE ====================
+  async searchLamovie(query) {
+    const results = [];
+    const queryLower = query.toLowerCase();
     
-    if (tmdbResults.length === 0) {
-      console.log(`❌ No se encontró en TMDB: ${query}`);
+    try {
+      // Lamovie usa URLs amigables: /peliculas/titulo-ano/
+      const slug = queryLower
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+      
+      const url = `https://lamovie.org/peliculas/${slug}/`;
+      console.log(`🔍 Probando URL directa: ${url}`);
+      
+      try {
+        const response = await axios.get(url, {
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          timeout: 15000
+        });
+        
+        if (response.status === 200) {
+          const $ = cheerio.load(response.data);
+          const title = $('h1').first().text().trim();
+          
+          if (title) {
+            results.push({
+              id: null,
+              title: title,
+              url: url,
+              thumbnail: $('img').first().attr('src'),
+              provider: 'lamovie',
+              type: 'movie'
+            });
+            console.log(`✅ Encontrada: ${title}`);
+            return results;
+          }
+        }
+      } catch(e) {
+        console.log(`URL directa falló: ${url}`);
+      }
+      
+      // Si no funciona, buscar en el sitio
+      const searchUrl = `https://lamovie.org/buscar?q=${encodeURIComponent(query)}`;
+      console.log(`🔍 Buscando en Lamovie: ${searchUrl}`);
+      const response = await axios.get(searchUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        timeout: 15000
+      });
+      const $ = cheerio.load(response.data);
+      
+      $('a[href*="/peliculas/"]').each((i, el) => {
+        let url = $(el).attr('href');
+        let title = $(el).find('h3, .title').text().trim();
+        if (!title) title = $(el).text().trim();
+        
+        if (title && title.toLowerCase().includes(queryLower)) {
+          if (url && !url.startsWith('http')) {
+            url = 'https://lamovie.org' + url;
+          }
+          results.push({
+            id: null,
+            title: title,
+            url: url,
+            thumbnail: $(el).find('img').attr('src'),
+            provider: 'lamovie',
+            type: 'movie'
+          });
+        }
+      });
+      
+      console.log(`✅ Lamovie: ${results.length} resultados`);
+      return results;
+    } catch (error) {
+      console.log('Error en Lamovie:', error.message);
       return [];
     }
-    
-    // 2. Para cada resultado de TMDB, intentar construir URL de Poseidon
-    for (const tmdb of tmdbResults) {
-      // Probar diferentes formatos de URL
-      const urlsToTry = [
-        `https://www.poseidonhd2.co/pelicula/${tmdb.id}`,
-        `https://www.poseidonhd2.co/pelicula/${tmdb.id}/${tmdb.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
-        `https://www.poseidonhd2.co/pelicula/${tmdb.id}/${tmdb.originalTitle?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || ''}`
-      ];
-      
-      for (const url of urlsToTry) {
-        try {
-          console.log(`🔍 Probando URL: ${url}`);
-          const response = await axios.get(url, {
-            headers: { 'User-Agent': 'Mozilla/5.0' },
-            timeout: 10000
-          });
-          
-          if (response.status === 200) {
-            const $ = cheerio.load(response.data);
-            const title = $('h1').first().text().trim();
-            if (title) {
-              results.push({
-                id: tmdb.id,
-                title: title,
-                url: url,
-                thumbnail: tmdb.poster,
-                provider: 'poseidon',
-                type: 'movie',
-                year: tmdb.year
-              });
-              console.log(`✅ Encontrada: ${title} -> ${url}`);
-              return results; // Devolver el primero que encuentre
-            }
-          }
-        } catch(e) {
-          console.log(`❌ URL no válida: ${url}`);
-        }
-      }
-    }
-    
-    console.log(`✅ Poseidon: ${results.length} resultados`);
-    return results;
-  } catch (error) {
-    console.log('Error en Poseidon:', error.message);
-    return [];
   }
-}
   
   // ==================== BÚSQUEDA COMBINADA ====================
-// ==================== BÚSQUEDA COMBINADA ====================
-async search(query) {
-  console.log(`🔍 Buscando: "${query}"`);
-  
-  // Buscar en PoseidonHD2 (usa TMDB internamente)
-  const poseidonResults = await this.searchPoseidon(query);
-  if (poseidonResults.length > 0) {
-    console.log(`✅ ${poseidonResults.length} resultados de PoseidonHD2`);
-    return poseidonResults;
-  }
-  
-  // Si no hay resultados, buscar en TMDB
-  const tmdbMovies = await this.searchTMDB(query, 'movie');
-  const tmdbSeries = await this.searchTMDB(query, 'tv');
-  const allTmdb = [...tmdbMovies, ...tmdbSeries];
-  
-  return allTmdb.map(tm => ({
-    id: tm.id,
-    title: tm.title,
-    year: tm.year,
-    url: null,
-    thumbnail: tm.poster,
-    provider: 'tmdb',
-    type: tm.type === 'tv' ? 'serie' : 'movie'
-  }));
-}
-  // ==================== OBTENER INFORMACIÓN ====================
-  async getInfo(url) {
-    // Detectar episodio
-    if (url.includes('/episodio/')) {
-      console.log(`🎬 Detectado como episodio: ${url}`);
-      return await this.getEpisodeInfo(url);
+  async search(query) {
+    console.log(`🔍 Buscando: "${query}"`);
+    
+    // Buscar en Lamovie
+    const lamovieResults = await this.searchLamovie(query);
+    if (lamovieResults.length > 0) {
+      console.log(`✅ ${lamovieResults.length} resultados de Lamovie`);
+      return lamovieResults;
     }
     
-    // Detectar PoseidonHD2
-    if (url.includes('poseidonhd2.co')) {
-      console.log(`🎬 Detectado como PoseidonHD2: ${url}`);
-      return await this.getPoseidonInfo(url);
+    // Si no hay resultados, buscar en TMDB
+    const tmdbMovies = await this.searchTMDB(query, 'movie');
+    const tmdbSeries = await this.searchTMDB(query, 'tv');
+    const allTmdb = [...tmdbMovies, ...tmdbSeries];
+    
+    return allTmdb.map(tm => ({
+      id: tm.id,
+      title: tm.title,
+      year: tm.year,
+      url: null,
+      thumbnail: tm.poster,
+      provider: 'tmdb',
+      type: tm.type === 'tv' ? 'serie' : 'movie'
+    }));
+  }
+  
+  // ==================== OBTENER INFORMACIÓN ====================
+  async getInfo(url) {
+    // Detectar Lamovie
+    if (url.includes('lamovie.org')) {
+      console.log(`🎬 Detectado como Lamovie: ${url}`);
+      return await this.getLamovieInfo(url);
     }
     
     return null;
   }
   
-  // ==================== POSEIDON INFO ====================
-  async getPoseidonInfo(url) {
+  // ==================== LAMOVIE INFO ====================
+  async getLamovieInfo(url) {
     try {
-      console.log(`📄 Obteniendo info de PoseidonHD2: ${url}`);
+      console.log(`📄 Obteniendo info de Lamovie: ${url}`);
       const response = await axios.get(url, {
         headers: { 'User-Agent': 'Mozilla/5.0' },
         timeout: 15000
@@ -163,117 +174,67 @@ async search(query) {
       
       // Año
       let year = null;
-      $('.year, .date').each((i, el) => {
-        const match = $(el).text().match(/\b(19|20)\d{2}\b/);
-        if (match) year = match[0];
-      });
+      const yearMatch = title.match(/\b(19|20)\d{2}\b/);
+      if (yearMatch) year = yearMatch[0];
       
       // Sinopsis
       let synopsis = '';
       $('p').each((i, el) => {
         const text = $(el).text().trim();
-        if (text.length > 100 && !text.includes('Ver')) {
+        if (text.length > 100 && !text.includes('Buscar')) {
           synopsis = text;
           return false;
         }
       });
       
       // Poster
-      let poster = $('img').first().attr('src');
-      if (poster && poster.startsWith('//')) poster = 'https:' + poster;
+      let poster = $('.--player-bg').css('background-image');
+      if (poster) {
+        const match = poster.match(/url\(["']?([^"')]+)["']?\)/);
+        if (match) poster = match[1];
+      }
       
       // ==================== SERVIDORES ====================
       const downloadLinks = [];
       
-      // Buscar enlaces con data-tr (contienen base64)
-      $('[data-tr]').each((i, el) => {
-        const dataTr = $(el).attr('data-tr');
-        const serverName = $(el).find('span').first().text().trim();
-        const quality = $(el).find('span').last().text().trim() || 'HD';
-        
-        if (dataTr && dataTr !== '#') {
+      // Buscar enlaces de video (data-video o src)
+      $('[data-video], iframe').each((i, el) => {
+        const videoUrl = $(el).attr('data-video') || $(el).attr('src');
+        if (videoUrl && videoUrl.startsWith('http')) {
           downloadLinks.push({
-            server: serverName || `Servidor ${i+1}`,
-            url: dataTr,
-            type: 'iframe',
-            quality: quality
+            server: `Servidor ${i+1}`,
+            url: videoUrl,
+            type: 'iframe'
           });
         }
       });
       
-      // También buscar iframes directos
-      if (downloadLinks.length === 0) {
-        $('iframe').each((i, el) => {
-          const src = $(el).attr('src');
-          if (src && src.startsWith('http')) {
-            downloadLinks.push({
-              server: `Servidor ${i+1}`,
-              url: src,
-              type: 'iframe'
-            });
-          }
-        });
-      }
+      // Buscar botón de play
+      $('.--pl, .play-button, .btn-play').each((i, el) => {
+        const videoUrl = $(el).attr('data-url') || $(el).attr('data-video');
+        if (videoUrl && videoUrl.startsWith('http')) {
+          downloadLinks.push({
+            server: `Reproductor ${i+1}`,
+            url: videoUrl,
+            type: 'iframe'
+          });
+        }
+      });
       
-      console.log(`✅ PoseidonHD2: ${downloadLinks.length} servidores encontrados`);
-      
-      // Detectar tipo
-      let type = 'movie';
-      if (url.includes('/serie/')) type = 'serie';
-      else if (url.includes('/episodio/')) type = 'episode';
+      console.log(`✅ Lamovie: ${downloadLinks.length} servidores encontrados`);
       
       return {
         title: title,
         synopsis: synopsis.substring(0, 500) || 'Sinopsis no disponible',
         year: year,
         url: url,
-        provider: 'poseidon',
+        provider: 'lamovie',
         poster: poster,
         downloadLinks: downloadLinks,
-        type: type
+        type: 'movie'
       };
     } catch (error) {
-      console.error('Error en getPoseidonInfo:', error.message);
-      return null;
-    }
-  }
-  
-  // ==================== EPISODIOS ====================
-  async getEpisodeInfo(episodeUrl) {
-    try {
-      console.log(`📄 Obteniendo episodio de: ${episodeUrl}`);
-      const response = await axios.get(episodeUrl, {
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        timeout: 15000
-      });
-      const $ = cheerio.load(response.data);
-      
-      const title = $('h1').first().text().trim() || 'Episodio';
-      
-      const downloadLinks = [];
-      
-      $('[data-tr]').each((i, el) => {
-        const dataTr = $(el).attr('data-tr');
-        const serverName = $(el).find('span').first().text().trim();
-        
-        if (dataTr && dataTr !== '#') {
-          downloadLinks.push({
-            server: serverName || `Servidor ${i+1}`,
-            url: dataTr,
-            type: 'iframe'
-          });
-        }
-      });
-      
-      console.log(`✅ ${downloadLinks.length} servidores encontrados para el episodio`);
-      
-      return {
-        title: title,
-        downloadLinks: downloadLinks,
-        episodes: []
-      };
-    } catch (error) {
-      console.error('Error en getEpisodeInfo:', error.message);
+      console.error('Error en getLamovieInfo:', error.message);
       return null;
     }
   }
