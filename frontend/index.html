@@ -283,7 +283,7 @@ async function searchMovies() {
         }
         
         // 🔥 AHORA FILTRAR RESULTADOS DE POSEIDON (no cinecalidad)
-        const validResults = data.results.filter(movie => movie.url && movie.url.includes('poseidonhd2.co'));
+        const validResults = data.results.filter(movie => movie.url);
         
         if (validResults.length === 0) {
             grid.innerHTML = '<div class="no-results">😞 No se encontraron enlaces disponibles</div>';
