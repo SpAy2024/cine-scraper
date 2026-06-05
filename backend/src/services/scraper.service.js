@@ -43,44 +43,69 @@ class ScraperService {
   }
   
   // ==================== POSEIDONHD2 ====================
-async searchPoseidon(query) {
+  async searchPoseidon(query) {
   const results = [];
+  const queryLower = query.toLowerCase();
   
   try {
-    // 1. Buscar en TMDB para obtener el ID
-    const tmdbResults = await this.searchTMDB(query);
-    
-    for (const tmdb of tmdbResults) {
-      // 2. Intentar construir URL de Poseidon con el ID de TMDB
-      const possibleUrl = `https://www.poseidonhd2.co/pelicula/${tmdb.id}`;
-      console.log(`🔍 Probando URL: ${possibleUrl}`);
-      
+    // Si el query es un número (ID de TMDB), buscar directamente
+    if (/^\d+$/.test(query)) {
+      const url = `https://www.poseidonhd2.co/pelicula/${query}/ballistic`;
+      console.log(`🔍 Probando URL por ID: ${url}`);
       try {
-        const response = await axios.get(possibleUrl, {
+        const response = await axios.get(url, {
           headers: { 'User-Agent': 'Mozilla/5.0' },
-          timeout: 10000
+          timeout: 15000
         });
-        
         if (response.status === 200) {
           const $ = cheerio.load(response.data);
           const title = $('h1').first().text().trim();
-          
-          results.push({
-            id: tmdb.id,
-            title: title || tmdb.title,
-            url: possibleUrl,
-            thumbnail: tmdb.poster,
-            provider: 'poseidon',
-            type: 'movie'
-          });
-          
-          console.log(`✅ Encontrado: ${title} -> ${possibleUrl}`);
-          return results; // Devolver el primero que encuentre
+          if (title) {
+            results.push({
+              id: query,
+              title: title,
+              url: url,
+              thumbnail: null,
+              provider: 'poseidon',
+              type: 'movie'
+            });
+            console.log(`✅ Encontrada por ID: ${title}`);
+            return results;
+          }
         }
       } catch(e) {
-        console.log(`❌ No encontrado: ${possibleUrl}`);
+        console.log(`Error con ID ${query}:`, e.message);
       }
     }
+    
+    // Si es texto, buscar normalmente
+    const searchUrl = `https://www.poseidonhd2.co/buscar?q=${encodeURIComponent(query)}`;
+    console.log(`🔍 Buscando en Poseidon: ${searchUrl}`);
+    const response = await axios.get(searchUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      timeout: 15000
+    });
+    const $ = cheerio.load(response.data);
+    
+    $('a[href*="/pelicula/"]').each((i, el) => {
+      let url = $(el).attr('href');
+      let title = $(el).find('h3, .title').text().trim();
+      if (!title) title = $(el).text().trim();
+      
+      if (title && title.toLowerCase().includes(queryLower)) {
+        if (url && !url.startsWith('http')) {
+          url = 'https://www.poseidonhd2.co' + url;
+        }
+        results.push({
+          id: null,
+          title: title,
+          url: url,
+          thumbnail: $(el).find('img').attr('src'),
+          provider: 'poseidon',
+          type: 'movie'
+        });
+      }
+    });
     
     console.log(`✅ Poseidon: ${results.length} resultados`);
     return results;
@@ -89,20 +114,19 @@ async searchPoseidon(query) {
     return [];
   }
 }
-
-
+  
   // ==================== BÚSQUEDA COMBINADA ====================
-async search(query) {
+  async search(query) {
   console.log(`🔍 Buscando: "${query}"`);
   
-  // Intentar buscar en Poseidon (usa TMDB internamente)
+  // Buscar en PoseidonHD2
   const poseidonResults = await this.searchPoseidon(query);
   if (poseidonResults.length > 0) {
     console.log(`✅ ${poseidonResults.length} resultados de PoseidonHD2`);
     return poseidonResults;
   }
   
-  // Fallback a TMDB
+  // Si no hay resultados, buscar en TMDB
   const tmdbMovies = await this.searchTMDB(query, 'movie');
   const tmdbSeries = await this.searchTMDB(query, 'tv');
   const allTmdb = [...tmdbMovies, ...tmdbSeries];
@@ -117,8 +141,7 @@ async search(query) {
     type: tm.type === 'tv' ? 'serie' : 'movie'
   }));
 }
-
-
+  
   // ==================== OBTENER INFORMACIÓN ====================
   async getInfo(url) {
     // Detectar episodio
