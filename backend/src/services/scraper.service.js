@@ -201,25 +201,31 @@ async getPelisflixInfo(url) {
     const downloadLinks = [];
     
     // Buscar divs con data-url (en base64)
-    $('[data-url]').each((i, el) => {
-      const dataUrl = $(el).attr('data-url');
-      const serverName = $(el).find('.nmopt').first().text().trim() || $(el).find('span').first().text().trim();
-      const idioma = $(el).closest('.drpdn').find('.bstd span:first-child').text().trim() || 'Latino';
-      
-      if (dataUrl && dataUrl !== '#') {
-        try {
-          // Decodificar base64 a URL real
-          const decodedUrl = Buffer.from(dataUrl, 'base64').toString('utf-8');
-          downloadLinks.push({
-            server: `${idioma} - ${serverName || `Servidor ${i+1}`}`,
-            url: decodedUrl,
-            type: 'iframe'
-          });
-        } catch(e) {
-          console.log(`Error decodificando URL: ${e.message}`);
-        }
-      }
-    });
+    // Dentro de getPelisflixInfo, mejora la extracción de servidores:
+$('[data-url]').each((i, el) => {
+  const dataUrl = $(el).attr('data-url');
+  
+  // Limpiar nombre del servidor
+  let serverName = $(el).find('.nmopt').first().text().trim();
+  const idiomaSpan = $(el).find('span').last().text().trim();
+  const calidad = idiomaSpan.match(/HD|4K|1080p|720p/i)?.[0] || 'HD';
+  
+  if (!serverName) {
+    serverName = `${idioma} - Calidad ${calidad}`;
+  }
+  
+  if (dataUrl && dataUrl !== '#') {
+    try {
+      const decodedUrl = Buffer.from(dataUrl, 'base64').toString('utf-8');
+      downloadLinks.push({
+        server: serverName,
+        url: decodedUrl,
+        type: 'iframe',
+        quality: calidad
+      });
+    } catch(e) {}
+  }
+});
     
     // También buscar iframes como fallback
     if (downloadLinks.length === 0) {
