@@ -140,89 +140,84 @@ class ScraperService {
   
   // ==================== LAMOVIE INFO (CON PUPPETEER) ====================
   async getLamovieInfo(url) {
-    try {
-      console.log(`📄 Obteniendo info de Lamovie: ${url}`);
-      
-      const browser = await this.getBrowser();
-      const page = await browser.newPage();
-      
-      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-      await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
-      
-      // Esperar a que cargue el reproductor
-      await page.waitForSelector('.movies-full__player, .--player-bg, iframe', { timeout: 10000 }).catch(() => {
-        console.log('⚠️ No se encontró el reproductor');
-      });
-      
-      // Extraer datos
-      const data = await page.evaluate(() => {
-        const title = document.querySelector('h1')?.innerText?.trim() || 'Sin título';
-        
-        let year = null;
-        const yearMatch = title.match(/\b(19|20)\d{2}\b/);
-        if (yearMatch) year = yearMatch[0];
-        
-        // Sinopsis
-        let synopsis = '';
-        const descElement = document.querySelector('.description, .sinopsis, .wp-content p');
-        if (descElement) synopsis = descElement.innerText.trim();
-        
-        // Poster
-        let poster = null;
-        const bgElement = document.querySelector('.--player-bg');
-        if (bgElement) {
-          const bgStyle = bgElement.getAttribute('style');
-          const match = bgStyle?.match(/url\(["']?([^"')]+)["']?\)/);
-          if (match) poster = match[1];
-        }
-        
-        // Servidores - buscar iframes
-        const servers = [];
-        document.querySelectorAll('iframe').forEach((iframe, i) => {
-          const src = iframe.src;
-          if (src && src.startsWith('http')) {
-            servers.push({
-              server: `Servidor ${i+1}`,
-              url: src,
-              type: 'iframe'
-            });
-          }
-        });
-        
-        // Buscar data-video
-        document.querySelectorAll('[data-video]').forEach((el, i) => {
-          const videoUrl = el.getAttribute('data-video');
-          if (videoUrl && videoUrl.startsWith('http')) {
-            servers.push({
-              server: `Servidor ${i+1}`,
-              url: videoUrl,
-              type: 'iframe'
-            });
-          }
-        });
-        
-        return { title, year, synopsis, poster, servers };
-      });
-      
-      await page.close();
-      
-      console.log(`✅ Lamovie: ${data.servers.length} servidores encontrados`);
-      
-      return {
-        title: data.title,
-        synopsis: data.synopsis.substring(0, 500) || 'Sinopsis no disponible',
-        year: data.year,
-        url: url,
-        provider: 'lamovie',
-        poster: data.poster,
-        downloadLinks: data.servers,
-        type: 'movie'
-      };
-    } catch (error) {
-      console.error('Error en getLamovieInfo:', error.message);
-      return null;
+  try {
+    console.log(`📄 Obteniendo info de Lamovie: ${url}`);
+    const response = await axios.get(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      timeout: 15000
+    });
+    const $ = cheerio.load(response.data);
+    
+    // Título
+    const title = $('h1').first().text().trim() || 'Sin título';
+    
+    // Año
+    let year = null;
+    const yearMatch = title.match(/\b(19|20)\d{2}\b/);
+    if (yearMatch) year = yearMatch[0];
+    
+    // Sinopsis
+    let synopsis = '';
+    $('p').each((i, el) => {
+      const text = $(el).text().trim();
+      if (text.length > 100 && !text.includes('Ver')) {
+        synopsis = text;
+        return false;
+      }
+    });
+    
+    // Poster
+    let poster = null;
+    const bgStyle = $('.--player-bg').attr('style');
+    if (bgStyle) {
+      const match = bgStyle.match(/url\(["']?([^"')]+)["']?\)/);
+      if (match) poster = match[1];
     }
+    
+    // Servidores - buscar iframes
+    const downloadLinks = [];
+    $('iframe').each((i, el) => {
+      const src = $(el).attr('src');
+      if (src && src.startsWith('http')) {
+        downloadLinks.push({
+          server: `Servidor ${i+1}`,
+          url: src,
+          type: 'iframe'
+        });
+      }
+    });
+    
+    // Buscar data-video
+    $('[data-video]').each((i, el) => {
+      const videoUrl = $(el).attr('data-video');
+      if (videoUrl && videoUrl.startsWith('http')) {
+        downloadLinks.push({
+          server: `Servidor ${i+1}`,
+          url: videoUrl,
+          type: 'iframe'
+        });
+      }
+    });
+    
+    console.log(`✅ Lamovie: ${downloadLinks.length} servidores encontrados`);
+    
+    return {
+      title: title,
+      synopsis: synopsis.substring(0, 500) || 'Sinopsis no disponible',
+      year: year,
+      url: url,
+      provider: 'lamovie',
+      poster: poster,
+      downloadLinks: downloadLinks,
+      type: 'movie'
+    };
+  } catch (error) {
+    console.error('Error en getLamovieInfo:', error.message);
+    return null;
   }
+}
+
+
 }
 
 module.exports = new ScraperService();
