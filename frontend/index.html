@@ -286,7 +286,7 @@ async function searchMovies() {
         }
         
         // Mostrar resultados con URL
-        const validResults = data.results.filter(movie => movie.url);
+        const validResults = data.results.filter(movie => movie.url && movie.provider === 'poseidon');
         
         if (validResults.length === 0) {
             grid.innerHTML = '<div class="no-results">😞 No se encontraron enlaces disponibles</div>';
