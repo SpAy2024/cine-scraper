@@ -212,6 +212,7 @@
             .hero { padding: 0 20px; }
             .hero h1 { font-size: 2rem; }
             .results { padding: 20px; }
+            .movie-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
         }
     </style>
 </head>
@@ -230,7 +231,7 @@
 
 <div class="search-container">
     <div class="search-box">
-        <input type="text" id="searchInput" placeholder="Ej: Batman, El señor de los anillos, Inception..." autocomplete="off">
+        <input type="text" id="searchInput" placeholder="Ej: 12 desafíos, protector, batman..." autocomplete="off">
         <button onclick="searchMovies()">🔍 Buscar</button>
     </div>
 </div>
@@ -250,56 +251,62 @@
     const API_URL = window.location.hostname === 'localhost' 
         ? 'http://localhost:3001/api/v1/movies'
         : '/api/v1/movies';
+    
+    const API_KEY = 'a7f3k9m2x8q4w1e6r5t0y9u4i7o2p1l3';
 
-   async function searchMovies() {
-    const query = document.getElementById('searchInput').value.trim();
-    if (!query) return alert('Escribe una película');
-    
-    const grid = document.getElementById('moviesGrid');
-    grid.innerHTML = '<div class="loading">🔍 Buscando...</div>';
-    
-    try {
-        const response = await fetchWithAuth(`${API_URL}/search?q=${encodeURIComponent(query)}`);
-        const data = await response.json();
-        
-        console.log('Respuesta completa:', data);
-        console.log('Resultados:', data.results);
-        
-        if (!data.results || data.results.length === 0) {
-            grid.innerHTML = '<div class="no-results">😞 No se encontraron resultados</div>';
-            return;
-        }
-        
-        // ✅ Mostrar TODOS los resultados (sin filtro)
-        const validResults = data.results;
-        
-        console.log('Mostrando:', validResults.length, 'resultados');
-        
-        if (validResults.length === 0) {
-            grid.innerHTML = '<div class="no-results">😞 No se encontraron enlaces disponibles</div>';
-            return;
-        }
-        
-        grid.innerHTML = '';
-        validResults.forEach(movie => {
-            const card = document.createElement('div');
-            card.className = 'movie-card';
-            card.innerHTML = `
-                ${movie.thumbnail ? `<img src="${movie.thumbnail}" alt="${movie.title}">` : '<div class="no-image">🎬</div>'}
-                <h3>${movie.title.substring(0, 40)}</h3>
-            `;
-            card.onclick = () => getMovieInfo(movie.url);
-            grid.appendChild(card);
+    async function fetchWithAuth(url, options = {}) {
+        const response = await fetch(url, {
+            ...options,
+            headers: {
+                'x-api-key': API_KEY,
+                ...options.headers
+            }
         });
-    } catch (error) {
-        console.error('Error:', error);
-        grid.innerHTML = '<div class="no-results">❌ Error al buscar</div>';
+        return response;
     }
-}
 
-
-
-
+    async function searchMovies() {
+        const query = document.getElementById('searchInput').value.trim();
+        if (!query) return alert('Escribe una película');
+        
+        const grid = document.getElementById('moviesGrid');
+        grid.innerHTML = '<div class="loading">🔍 Buscando...</div>';
+        
+        try {
+            const response = await fetchWithAuth(`${API_URL}/search?q=${encodeURIComponent(query)}`);
+            const data = await response.json();
+            
+            console.log('Respuesta:', data);
+            
+            if (!data.results || data.results.length === 0) {
+                grid.innerHTML = '<div class="no-results">😞 No se encontraron resultados</div>';
+                return;
+            }
+            
+            // Mostrar resultados de Cinecalidad (los que tienen URL)
+            const validResults = data.results.filter(movie => movie.url && movie.provider === 'cinecalidad');
+            
+            if (validResults.length === 0) {
+                grid.innerHTML = '<div class="no-results">😞 No se encontraron enlaces disponibles</div>';
+                return;
+            }
+            
+            grid.innerHTML = '';
+            validResults.forEach(movie => {
+                const card = document.createElement('div');
+                card.className = 'movie-card';
+                card.innerHTML = `
+                    ${movie.thumbnail ? `<img src="${movie.thumbnail}" alt="${movie.title}" onerror="this.style.display='none'">` : '<div class="no-image">🎬</div>'}
+                    <h3>${movie.title.substring(0, 40)}${movie.title.length > 40 ? '...' : ''}</h3>
+                `;
+                card.onclick = () => getMovieInfo(movie.url);
+                grid.appendChild(card);
+            });
+        } catch (error) {
+            console.error('Error:', error);
+            grid.innerHTML = '<div class="no-results">❌ Error al buscar</div>';
+        }
+    }
 
     async function getMovieInfo(url) {
         const modal = document.getElementById('modal');
@@ -308,12 +315,16 @@
         modal.style.display = 'block';
         
         try {
-            const response = await fetch(`${API_URL}/info?url=${encodeURIComponent(url)}`);
+            const response = await fetchWithAuth(`${API_URL}/info?url=${encodeURIComponent(url)}`);
             const data = await response.json();
+            
+            console.log('Info respuesta:', data);
             
             if (!data.data) throw new Error('No hay datos');
             
             const movie = data.data;
+            const posterUrl = movie.poster || movie.thumbnail;
+            
             modalBody.innerHTML = `
                 <div class="video-container">
                     <div id="playerFrame" style="height:56vh; background:#000; display:flex; align-items:center; justify-content:center; color:#888;">
@@ -321,7 +332,9 @@
                     </div>
                 </div>
                 <div class="modal-info">
+                    ${posterUrl ? `<img src="${posterUrl}" style="width:100px; float:right; border-radius:8px; margin-left:15px;" alt="${movie.title}">` : ''}
                     <h2>${movie.title}</h2>
+                    ${movie.year ? `<p><strong>Año:</strong> ${movie.year}</p>` : ''}
                     <p>${movie.synopsis || 'Sinopsis no disponible'}</p>
                     <div class="servers-grid" id="serversGrid"></div>
                 </div>
@@ -332,7 +345,7 @@
                 movie.downloadLinks.forEach(server => {
                     const btn = document.createElement('button');
                     btn.className = 'server-btn';
-                    btn.textContent = server.server;
+                    btn.textContent = server.server || 'Servidor';
                     btn.onclick = () => {
                         const frame = document.getElementById('playerFrame');
                         frame.innerHTML = `<iframe src="${server.url}" frameborder="0" allowfullscreen allow="autoplay; encrypted-media" style="width:100%; height:100%;"></iframe>`;
@@ -343,10 +356,11 @@
                 serversGrid.innerHTML = '<div class="no-results">⚠️ No hay servidores disponibles</div>';
             }
         } catch (error) {
+            console.error('Error:', error);
             modalBody.innerHTML = `<div class="no-results">❌ Error: ${error.message}</div>`;
         }
     }
-    
+
     function closeModal() {
         document.getElementById('modal').style.display = 'none';
     }
@@ -355,5 +369,6 @@
         if (e.key === 'Enter') searchMovies();
     });
 </script>
+
 </body>
 </html>
