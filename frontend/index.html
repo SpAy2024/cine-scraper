@@ -264,7 +264,7 @@
         return response;
     }
 
- async function searchMovies() {
+async function searchMovies() {
     const query = document.getElementById('searchInput').value.trim();
     if (!query) return alert('Escribe una película');
     
@@ -282,8 +282,8 @@
             return;
         }
         
-        // Mostrar TODOS los resultados que tienen URL
-        const validResults = data.results.filter(movie => movie.url);
+        // 🔥 AHORA FILTRAR RESULTADOS DE POSEIDON (no cinecalidad)
+        const validResults = data.results.filter(movie => movie.url && movie.url.includes('poseidonhd2.co'));
         
         if (validResults.length === 0) {
             grid.innerHTML = '<div class="no-results">😞 No se encontraron enlaces disponibles</div>';
@@ -291,33 +291,16 @@
         }
         
         grid.innerHTML = '';
-        
-        for (const movie of validResults) {
+        validResults.forEach(movie => {
             const card = document.createElement('div');
             card.className = 'movie-card';
-            
-            let posterImg = movie.thumbnail || movie.poster;
-            
-            // Si no hay poster, intentar buscar en TMDB por título
-            if (!posterImg && movie.title) {
-                try {
-                    const tmdbRes = await fetchWithAuth(`${API_URL}/tmdb/search?title=${encodeURIComponent(movie.title)}`);
-                    const tmdbData = await tmdbRes.json();
-                    if (tmdbData.movie && tmdbData.movie.posterPath) {
-                        posterImg = tmdbData.movie.posterPath;
-                    }
-                } catch(e) {
-                    console.log('Error buscando poster en TMDB');
-                }
-            }
-            
             card.innerHTML = `
-                ${posterImg ? `<img src="${posterImg}" alt="${movie.title}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">` : '<div class="no-image">🎬</div>'}
-                <h3>${movie.title.substring(0, 50)}${movie.title.length > 50 ? '...' : ''}</h3>
+                ${movie.thumbnail ? `<img src="${movie.thumbnail}" alt="${movie.title}" onerror="this.style.display='none'">` : '<div class="no-image">🎬</div>'}
+                <h3>${movie.title.substring(0, 40)}${movie.title.length > 40 ? '...' : ''}</h3>
             `;
             card.onclick = () => getMovieInfo(movie.url);
             grid.appendChild(card);
-        }
+        });
     } catch (error) {
         console.error('Error:', error);
         grid.innerHTML = '<div class="no-results">❌ Error al buscar</div>';
