@@ -264,7 +264,7 @@
         return response;
     }
 
-   async function searchMovies() {
+async function searchMovies() {
     const query = document.getElementById('searchInput').value.trim();
     if (!query) return alert('Escribe una película');
     
@@ -282,8 +282,8 @@
             return;
         }
         
-        // ✅ Mostrar resultados de poseidon O lamovie
-        const validResults = data.results.filter(movie => movie.url && (movie.provider === 'poseidon' || movie.provider === 'lamovie'));
+        // 🔥 AHORA FILTRAR RESULTADOS DE POSEIDON (no cinecalidad)
+        const validResults = data.results.filter(movie => movie.url);
         
         if (validResults.length === 0) {
             grid.innerHTML = '<div class="no-results">😞 No se encontraron enlaces disponibles</div>';
@@ -306,7 +306,6 @@
         grid.innerHTML = '<div class="no-results">❌ Error al buscar</div>';
     }
 }
-  
 
    async function getMovieInfo(url) {
     const modal = document.getElementById('modal');
