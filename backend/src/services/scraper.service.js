@@ -164,6 +164,7 @@ class ScraperService {
   }
   
   // ==================== PELISFLIX INFO ====================
+
 async getPelisflixInfo(url) {
   try {
     console.log(`📄 Obteniendo info de Pelisflix: ${url}`);
@@ -200,32 +201,57 @@ async getPelisflixInfo(url) {
     // ==================== SERVIDORES ====================
     const downloadLinks = [];
     
-    // Buscar divs con data-url (en base64)
-    // Dentro de getPelisflixInfo, mejora la extracción de servidores:
-$('[data-url]').each((i, el) => {
-  const dataUrl = $(el).attr('data-url');
-  
-  // Limpiar nombre del servidor
-  let serverName = $(el).find('.nmopt').first().text().trim();
-  const idiomaSpan = $(el).find('span').last().text().trim();
-  const calidad = idiomaSpan.match(/HD|4K|1080p|720p/i)?.[0] || 'HD';
-  
-  if (!serverName) {
-    serverName = `${idioma} - Calidad ${calidad}`;
-  }
-  
-  if (dataUrl && dataUrl !== '#') {
-    try {
-      const decodedUrl = Buffer.from(dataUrl, 'base64').toString('utf-8');
-      downloadLinks.push({
-        server: serverName,
-        url: decodedUrl,
-        type: 'iframe',
-        quality: calidad
-      });
-    } catch(e) {}
-  }
-});
+    // Buscar divs con data-url
+    $('[data-url]').each((i, el) => {
+      const dataUrl = $(el).attr('data-url');
+      
+      // 🔥 MEJORAR EXTRACCIÓN DEL NOMBRE DEL SERVIDOR
+      let serverName = '';
+      let quality = 'HD';
+      let audio = 'Latino';
+      
+      // Buscar el texto dentro del span
+      const spanText = $(el).find('span').last().text().trim();
+      const firstSpanText = $(el).find('span').first().text().trim();
+      
+      // Extraer calidad (HD, 4K, etc.)
+      const qualityMatch = spanText.match(/HD|4K|1080p|720p/i);
+      if (qualityMatch) quality = qualityMatch[0];
+      
+      // Extraer nombre del servidor (Principal, Waaw, etc.)
+      if (spanText.includes('•')) {
+        serverName = spanText.split('•')[1].trim();
+      } else if (firstSpanText) {
+        serverName = firstSpanText;
+      } else {
+        serverName = `Servidor ${i+1}`;
+      }
+      
+      // Limpiar nombre
+      serverName = serverName.replace(/\s*\(.*\)\s*/, '').trim();
+      
+      // Obtener el número de opción
+      const optionNum = $(el).find('.nmopt').first().text().trim();
+      if (optionNum) {
+        serverName = `${serverName} (Opción ${optionNum})`;
+      }
+      
+      if (dataUrl && dataUrl !== '#') {
+        try {
+          const decodedUrl = Buffer.from(dataUrl, 'base64').toString('utf-8');
+          downloadLinks.push({
+            server: serverName || `Servidor ${i+1}`,
+            url: decodedUrl,
+            type: 'iframe',
+            quality: quality,
+            audio: audio
+          });
+          console.log(`✅ Servidor encontrado: ${serverName} -> ${decodedUrl.substring(0, 50)}...`);
+        } catch(e) {
+          console.log(`Error decodificando: ${e.message}`);
+        }
+      }
+    });
     
     // También buscar iframes como fallback
     if (downloadLinks.length === 0) {
@@ -235,7 +261,9 @@ $('[data-url]').each((i, el) => {
           downloadLinks.push({
             server: `Servidor ${i+1}`,
             url: src,
-            type: 'iframe'
+            type: 'iframe',
+            quality: 'HD',
+            audio: 'Latino'
           });
         }
       });
@@ -258,6 +286,7 @@ $('[data-url]').each((i, el) => {
     return null;
   }
 }
+
   // ==================== EPISODIOS ====================
   async getEpisodeInfo(episodeUrl) {
     try {
