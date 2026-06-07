@@ -13,9 +13,9 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '../../frontend')));
 
 // Endpoints con API Key
-// En index.js, asegúrate que la ruta /search use el scraper
 app.get('/api/v1/movies/search', requireApiKey, async (req, res) => {
   const { q } = req.query;
+  console.log(`🔍 Buscando: ${q}`);
   if (!q) return res.status(400).json({ error: 'Se requiere q' });
   
   try {
