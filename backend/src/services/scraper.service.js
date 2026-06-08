@@ -111,9 +111,26 @@ async search(query) {
   
   // Buscar en Cinecalidad
   const cinecalidadResults = await this.searchCinecalidad(query);
+  
   if (cinecalidadResults.length > 0) {
-    console.log(`✅ ${cinecalidadResults.length} resultados de Cinecalidad`);
-    return cinecalidadResults;
+    // 🔥 Para cada resultado, buscar el poster en TMDB
+    const tmdbResults = await this.searchTMDB(query);
+    
+    const resultsWithPosters = cinecalidadResults.map(movie => {
+      // Buscar coincidencia en TMDB por título
+      const tmdbMatch = tmdbResults.find(tm => 
+        tm.title.toLowerCase().includes(movie.title.toLowerCase()) ||
+        movie.title.toLowerCase().includes(tm.title.toLowerCase())
+      );
+      
+      return {
+        ...movie,
+        thumbnail: tmdbMatch?.poster || movie.thumbnail
+      };
+    });
+    
+    console.log(`✅ ${cinecalidadResults.length} resultados de Cinecalidad con posters mejorados`);
+    return resultsWithPosters;
   }
   
   // Buscar en PelisPlus
