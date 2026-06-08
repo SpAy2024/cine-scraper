@@ -22,17 +22,22 @@ async searchTMDB(query, type = 'movie') {
     });
     
     if (response.data.results && response.data.results.length > 0) {
-      // Devolver SOLO el primer resultado (el más relevante)
       const item = response.data.results[0];
+      
+      // Construir URL del poster correctamente
+      let posterUrl = null;
+      if (item.poster_path) {
+        posterUrl = `https://image.tmdb.org/t/p/w500${item.poster_path}`;
+      }
+      
+      console.log(`📸 TMDB - "${item.title}": poster=${posterUrl ? 'SI' : 'NO'}`);
+      
       return [{
         id: item.id,
-        title: item.title || item.name,
-        originalTitle: item.original_title || item.original_name,
-        year: item.release_date ? item.release_date.split('-')[0] : (item.first_air_date ? item.first_air_date.split('-')[0] : null),
+        title: item.title,
+        year: item.release_date ? item.release_date.split('-')[0] : null,
         overview: item.overview,
-        poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : null,
-        backdrop: item.backdrop_path ? `https://image.tmdb.org/t/p/w1280${item.backdrop_path}` : null,
-        voteAverage: item.vote_average,
+        poster: posterUrl,
         provider: 'tmdb',
         type: type
       }];
@@ -43,6 +48,9 @@ async searchTMDB(query, type = 'movie') {
     return [];
   }
 }
+
+
+
   // ==================== CINECALIDAD ====================
   async searchCinecalidad(query) {
     const domains = [
@@ -114,34 +122,40 @@ async search(query) {
   const cinecalidadResults = await this.searchCinecalidad(query);
   
   if (cinecalidadResults.length > 0) {
-    // 🔥 Para cada resultado, buscar su propio poster en TMDB por título
     const resultsWithPosters = [];
     
     for (const movie of cinecalidadResults) {
-      // Buscar en TMDB usando el título exacto de la película
-      const tmdbResult = await this.searchTMDB(movie.title);
+      // Limpiar el título (quitar año y texto extra)
+      let cleanTitle = movie.title;
+      // Eliminar año del título (ej: "The Protector2025" -> "The Protector")
+      cleanTitle = cleanTitle.replace(/\d{4}/, '').trim();
+      // Eliminar texto después del año o descripción larga
+      cleanTitle = cleanTitle.split(/\d{4}/)[0].trim();
+      
+      console.log(`🔎 Buscando poster para: "${cleanTitle}"`);
+      
+      // Buscar en TMDB por el título limpio
+      const tmdbResult = await this.searchTMDB(cleanTitle);
       const poster = tmdbResult.length > 0 ? tmdbResult[0].poster : null;
       
       resultsWithPosters.push({
         ...movie,
-        thumbnail: poster || movie.thumbnail
+        thumbnail: poster,
+        title: cleanTitle // Usar título limpio
       });
-      
-      console.log(`📸 Poster para "${movie.title}": ${poster ? 'Encontrado' : 'No encontrado'}`);
     }
     
-    console.log(`✅ ${cinecalidadResults.length} resultados de Cinecalidad con posters individuales`);
+    console.log(`✅ ${resultsWithPosters.length} resultados con posters`);
     return resultsWithPosters;
   }
   
-  // Buscar en PelisPlus
+  // PelisPlus
   const pelisplusResults = await this.searchPelisplus(query);
   if (pelisplusResults.length > 0) {
-    console.log(`✅ ${pelisplusResults.length} resultados de PelisPlus`);
     return pelisplusResults;
   }
   
-  // Si no hay resultados, buscar en TMDB
+  // TMDB fallback
   const tmdbMovies = await this.searchTMDB(query, 'movie');
   const tmdbSeries = await this.searchTMDB(query, 'tv');
   const allTmdb = [...tmdbMovies, ...tmdbSeries];
@@ -156,7 +170,6 @@ async search(query) {
     type: tm.type === 'tv' ? 'serie' : 'movie'
   }));
 }
-
 
   // ==================== OBTENER INFORMACIÓN ====================
 // ==================== OBTENER INFORMACIÓN ====================
