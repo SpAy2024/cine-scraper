@@ -141,13 +141,13 @@ async search(query) {
 
 
   // ==================== OBTENER INFORMACIÓN ====================
+// ==================== OBTENER INFORMACIÓN ====================
 async getInfo(url) {
   // ==================== DETECTAR EPISODIO ====================
   if (url.includes('/episodio/') || url.includes('/ver-el-episodio/')) {
     console.log(`🎬 Detectado como episodio: ${url}`);
     return await this.getEpisodeInfo(url);
   }
-
 
   // ==================== DETECTAR PELISPLUS ====================
   if (url.includes('pelisplus21.com')) {
@@ -207,31 +207,46 @@ async getInfo(url) {
       }
     } catch (err) { console.log('TMDB no disponible'); }
     
-    // ==================== SERVIDORES ====================
+    // ==================== SERVIDORES (FILTRADOS) ====================
     const downloadLinks = [];
+    
+    // Servidores permitidos
+    const allowedServers = ['vimeos', 'voe', 'goodstream', 'hlswish'];
     
     $('#playeroptionsul .dooplay_player_option').each((i, el) => {
       const dataOption = $(el).attr('data-option');
-      const serverName = $(el).text().trim().replace(/Recomendado$/, '').trim();
-      if (dataOption && dataOption !== '#') {
+      let serverName = $(el).text().trim().replace(/Recomendado$/, '').trim().toLowerCase();
+      
+      // Verificar si el servidor está en la lista permitida
+      const isAllowed = allowedServers.some(allowed => serverName.includes(allowed));
+      
+      if (dataOption && dataOption !== '#' && isAllowed) {
         const match = dataOption.match(/zopass=([^&]+)/);
         if (match && match[1]) {
           try {
             const decodedUrl = Buffer.from(match[1], 'base64').toString('utf-8');
-            downloadLinks.push({ server: serverName || `Servidor ${i+1}`, url: decodedUrl, type: 'iframe' });
+            downloadLinks.push({ 
+              server: serverName.charAt(0).toUpperCase() + serverName.slice(1), 
+              url: decodedUrl, 
+              type: 'iframe' 
+            });
           } catch(e) {
-            downloadLinks.push({ server: serverName || `Servidor ${i+1}`, url: dataOption, type: 'iframe' });
+            downloadLinks.push({ server: serverName, url: dataOption, type: 'iframe' });
           }
         } else {
-          downloadLinks.push({ server: serverName || `Servidor ${i+1}`, url: dataOption, type: 'iframe' });
+          downloadLinks.push({ server: serverName, url: dataOption, type: 'iframe' });
         }
       }
     });
     
     $('#sbss a').each((i, el) => {
       const href = $(el).attr('href');
-      const serverName = $(el).find('li').text().trim() || 'Descarga';
-      if (href && href !== '#') {
+      const serverName = $(el).find('li').text().trim().toLowerCase() || 'Descarga';
+      
+      // Verificar si el servidor está en la lista permitida
+      const isAllowed = allowedServers.some(allowed => serverName.includes(allowed));
+      
+      if (href && href !== '#' && isAllowed) {
         downloadLinks.push({ server: serverName, url: href, type: 'download' });
       }
     });
@@ -285,7 +300,7 @@ async getInfo(url) {
       }
     }
     
-    console.log(`✅ ${downloadLinks.length} servidores, ${episodes.length} episodios`);
+    console.log(`✅ ${downloadLinks.length} servidores filtrados (Vimeos, Voe, Goodstream, Hlswish), ${episodes.length} episodios`);
     
     return {
       title: title,
