@@ -9,6 +9,9 @@ class ScraperService {
   // ==================== TMDB ====================
 async searchTMDB(query, type = 'movie') {
   try {
+    // Si la consulta está vacía, no buscar
+    if (!query || query.length < 3) return [];
+    
     let endpoint = `${TMDB_BASE}/search/movie`;
     if (type === 'tv') endpoint = `${TMDB_BASE}/search/tv`;
     
@@ -22,21 +25,29 @@ async searchTMDB(query, type = 'movie') {
     });
     
     if (response.data.results && response.data.results.length > 0) {
-      const item = response.data.results[0];
+      // Buscar coincidencia exacta primero
+      let bestMatch = response.data.results[0];
       
-      // Construir URL del poster correctamente
-      let posterUrl = null;
-      if (item.poster_path) {
-        posterUrl = `https://image.tmdb.org/t/p/w500${item.poster_path}`;
+      // Intentar encontrar una coincidencia más exacta
+      for (const item of response.data.results) {
+        if (item.title.toLowerCase() === query.toLowerCase()) {
+          bestMatch = item;
+          break;
+        }
       }
       
-      console.log(`📸 TMDB - "${item.title}": poster=${posterUrl ? 'SI' : 'NO'}`);
+      let posterUrl = null;
+      if (bestMatch.poster_path) {
+        posterUrl = `https://image.tmdb.org/t/p/w500${bestMatch.poster_path}`;
+      }
+      
+      console.log(`📸 TMDB - "${bestMatch.title}": poster=${posterUrl ? 'SI' : 'NO'}`);
       
       return [{
-        id: item.id,
-        title: item.title,
-        year: item.release_date ? item.release_date.split('-')[0] : null,
-        overview: item.overview,
+        id: bestMatch.id,
+        title: bestMatch.title,
+        year: bestMatch.release_date ? bestMatch.release_date.split('-')[0] : null,
+        overview: bestMatch.overview,
         poster: posterUrl,
         provider: 'tmdb',
         type: type
@@ -48,7 +59,6 @@ async searchTMDB(query, type = 'movie') {
     return [];
   }
 }
-
 
 
   // ==================== CINECALIDAD ====================
@@ -125,27 +135,43 @@ async search(query) {
     const resultsWithPosters = [];
     
     for (const movie of cinecalidadResults) {
-      // Limpiar el título (quitar año y texto extra)
+      // 🔥 MEJOR LIMPIEZA DEL TÍTULO
       let cleanTitle = movie.title;
-      // Eliminar año del título (ej: "The Protector2025" -> "The Protector")
-      cleanTitle = cleanTitle.replace(/\d{4}/, '').trim();
-      // Eliminar texto después del año o descripción larga
-      cleanTitle = cleanTitle.split(/\d{4}/)[0].trim();
       
-      console.log(`🔎 Buscando poster para: "${cleanTitle}"`);
+      // Eliminar año (ej: "The Protector2025" -> "The Protector")
+      cleanTitle = cleanTitle.replace(/\d{4}/g, '').trim();
+      
+      // Eliminar texto después de un número de años o palabras clave
+      const stopWords = ['Un ranchero', 'MASON', 'John Kruger', 'La Liga', 'Una joven', 'En el reino', 'Cuando una', 'Tom Lee', 'En la época', 'En un universo', 'Kiara', 'Trata sobre'];
+      for (const word of stopWords) {
+        if (cleanTitle.includes(word)) {
+          cleanTitle = cleanTitle.split(word)[0].trim();
+          break;
+        }
+      }
+      
+      // Si el título sigue siendo muy largo, tomar solo la primera parte
+      if (cleanTitle.length > 50) {
+        cleanTitle = cleanTitle.substring(0, 50).split(' ').slice(0, 3).join(' ');
+      }
+      
+      console.log(`🔎 Título original: "${movie.title}"`);
+      console.log(`🔎 Título limpio: "${cleanTitle}"`);
       
       // Buscar en TMDB por el título limpio
       const tmdbResult = await this.searchTMDB(cleanTitle);
       const poster = tmdbResult.length > 0 ? tmdbResult[0].poster : null;
       
+      console.log(`📸 Poster: ${poster ? 'ENCONTRADO' : 'NO ENCONTRADO'}`);
+      
       resultsWithPosters.push({
         ...movie,
         thumbnail: poster,
-        title: cleanTitle // Usar título limpio
+        title: cleanTitle
       });
     }
     
-    console.log(`✅ ${resultsWithPosters.length} resultados con posters`);
+    console.log(`✅ ${resultsWithPosters.length} resultados procesados`);
     return resultsWithPosters;
   }
   
@@ -170,6 +196,8 @@ async search(query) {
     type: tm.type === 'tv' ? 'serie' : 'movie'
   }));
 }
+
+
 
   // ==================== OBTENER INFORMACIÓN ====================
 // ==================== OBTENER INFORMACIÓN ====================
