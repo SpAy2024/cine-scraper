@@ -113,23 +113,23 @@ async search(query) {
   const cinecalidadResults = await this.searchCinecalidad(query);
   
   if (cinecalidadResults.length > 0) {
-    // 🔥 Para cada resultado, buscar el poster en TMDB
-    const tmdbResults = await this.searchTMDB(query);
+    // 🔥 Para cada resultado, buscar su propio poster en TMDB por título
+    const resultsWithPosters = [];
     
-    const resultsWithPosters = cinecalidadResults.map(movie => {
-      // Buscar coincidencia en TMDB por título
-      const tmdbMatch = tmdbResults.find(tm => 
-        tm.title.toLowerCase().includes(movie.title.toLowerCase()) ||
-        movie.title.toLowerCase().includes(tm.title.toLowerCase())
-      );
+    for (const movie of cinecalidadResults) {
+      // Buscar en TMDB usando el título exacto de la película
+      const tmdbResult = await this.searchTMDB(movie.title);
+      const poster = tmdbResult.length > 0 ? tmdbResult[0].poster : null;
       
-      return {
+      resultsWithPosters.push({
         ...movie,
-        thumbnail: tmdbMatch?.poster || movie.thumbnail
-      };
-    });
+        thumbnail: poster || movie.thumbnail
+      });
+      
+      console.log(`📸 Poster para "${movie.title}": ${poster ? 'Encontrado' : 'No encontrado'}`);
+    }
     
-    console.log(`✅ ${cinecalidadResults.length} resultados de Cinecalidad con posters mejorados`);
+    console.log(`✅ ${cinecalidadResults.length} resultados de Cinecalidad con posters individuales`);
     return resultsWithPosters;
   }
   
