@@ -7,41 +7,42 @@ const TMDB_BASE = 'https://api.themoviedb.org/3';
 class ScraperService {
   
   // ==================== TMDB ====================
-  async searchTMDB(query, type = 'movie') {
-    try {
-      let endpoint = `${TMDB_BASE}/search/movie`;
-      if (type === 'tv') endpoint = `${TMDB_BASE}/search/tv`;
-      
-      const response = await axios.get(endpoint, {
-        params: {
-          api_key: TMDB_API_KEY,
-          query: query,
-          language: 'es',
-          include_adult: false
-        }
-      });
-      
-      if (response.data.results && response.data.results.length > 0) {
-        return response.data.results.slice(0, 10).map(item => ({
-          id: item.id,
-          title: item.title || item.name,
-          originalTitle: item.original_title || item.original_name,
-          year: item.release_date ? item.release_date.split('-')[0] : (item.first_air_date ? item.first_air_date.split('-')[0] : null),
-          overview: item.overview,
-          poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : null,
-          backdrop: item.backdrop_path ? `https://image.tmdb.org/t/p/w1280${item.backdrop_path}` : null,
-          voteAverage: item.vote_average,
-          provider: 'tmdb',
-          type: type
-        }));
+async searchTMDB(query, type = 'movie') {
+  try {
+    let endpoint = `${TMDB_BASE}/search/movie`;
+    if (type === 'tv') endpoint = `${TMDB_BASE}/search/tv`;
+    
+    const response = await axios.get(endpoint, {
+      params: {
+        api_key: TMDB_API_KEY,
+        query: query,
+        language: 'es',
+        include_adult: false
       }
-      return [];
-    } catch (error) {
-      console.error('Error en searchTMDB:', error.message);
-      return [];
+    });
+    
+    if (response.data.results && response.data.results.length > 0) {
+      // Devolver SOLO el primer resultado (el más relevante)
+      const item = response.data.results[0];
+      return [{
+        id: item.id,
+        title: item.title || item.name,
+        originalTitle: item.original_title || item.original_name,
+        year: item.release_date ? item.release_date.split('-')[0] : (item.first_air_date ? item.first_air_date.split('-')[0] : null),
+        overview: item.overview,
+        poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : null,
+        backdrop: item.backdrop_path ? `https://image.tmdb.org/t/p/w1280${item.backdrop_path}` : null,
+        voteAverage: item.vote_average,
+        provider: 'tmdb',
+        type: type
+      }];
     }
+    return [];
+  } catch (error) {
+    console.error('Error en searchTMDB:', error.message);
+    return [];
   }
-  
+}
   // ==================== CINECALIDAD ====================
   async searchCinecalidad(query) {
     const domains = [
